@@ -53,12 +53,10 @@ class CollisionChecker(object):
         """
         assert (len(startPos) == self.getDim())
         assert (len(endPos) == self.getDim())
+        dim = self.getDim()
         for i in range(steps + 1):
             t = i / steps
-            testPoint = [
-                startPos[0] + t * (endPos[0] - startPos[0]),
-                startPos[1] + t * (endPos[1] - startPos[1]),
-            ]
+            testPoint = [startPos[d] + t * (endPos[d] - startPos[d]) for d in range(dim)]
             if self.pointInCollision(testPoint):
                 return True
         return False

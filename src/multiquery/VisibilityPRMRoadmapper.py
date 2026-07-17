@@ -10,7 +10,7 @@ from IPPRMBase import PRMBase
 import networkx as nx
 from scipy.spatial import cKDTree
 from IPPerfMonitor import IPPerfMonitor
-import NumPy as np
+import numpy as np
 
 class VisibilityStatsHandler():
     
@@ -89,7 +89,7 @@ class VisibilityPRMRoadmapper(PRMBase):
             nodeNumber += 1
         
     
-    def _addNodeToRoadmap(self, posList, kdTree, node, label, multipleConnections = false):
+    def _addNodeToRoadmap(self, posList, kdTree, node, label, multipleConnections = False):
         '''
         optimizations
         1. allow connection between start/goal nodes -> add to KD-tree
@@ -119,5 +119,5 @@ class VisibilityPRMRoadmapper(PRMBase):
             return None
         for index, goal in ennumerate(checkedGoalList):
             if not self._addNodeToRoadmap(posList, kdTree, checkedGoalList, f"goal_{index}", config["mConnections"]):
-            return None
+                return None
         return self.graph

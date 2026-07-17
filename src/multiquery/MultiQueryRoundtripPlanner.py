@@ -1,7 +1,10 @@
-from IPPRMBase import PRMBase
 import networkx as nx
+import numpy as np
+from typing import Type, Any, List
+
+from IPPRMBase import PRMBase
 from IPPerfMonitor import IPPerfMonitor
-import NumPy as np
+from IPEnvironment import CollisionChecker
 
 class MultiQueryRoundtripPlanner:
 

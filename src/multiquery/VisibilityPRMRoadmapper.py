@@ -98,14 +98,16 @@ class VisibilityPRMRoadmapper(PRMBase):
         
         connectionCandidates = kdTree.query(node_pos,k=5)
         result = False
-        for connectionCandidate in connectionCandidates[1]: 
-            self._isVisible(node_pos, (self.graph.nodes[list(posList.keys())[int(connectionCandidate)]]['pos']))
-            if self._isVisible(node_pos, (self.graph.nodes[list(posList.keys())[int(connectionCandidate)]]['pos'])):
-                 self.graph.add_node(label, pos=node_pos, color='lightgreen')
-                 self._addWeightedEdge(label, list(posList.keys())[connectionCandidate])
-                 result = True
-                 if not multipleConnections:
-                     break
+        for connectionCandidate in connectionCandidates[1]:
+            try :
+                if self._isVisible(node_pos, (self.graph.nodes[list(posList.keys())[connectionCandidate]]['pos'])):
+                    self.graph.add_node(label, pos=node_pos, color='lightgreen')
+                    self._addWeightedEdge(label, list(posList.keys())[connectionCandidate])
+                    result = True
+                    if not multipleConnections:
+                        break
+            except Exception as e:
+                    raise ValueError(f"{connectionCandidates[1]}, {connectionCandidate}, {list(posList.keys())}")
         return result
         
         
@@ -120,6 +122,9 @@ class VisibilityPRMRoadmapper(PRMBase):
         if not self._addNodeToRoadmap(posList, kdTree, checkedStartList[0], "start", config["mConnections"]):
             return None
         for index, goal in enumerate(checkedGoalList):
+            if config["directConnections"]:
+                posList = nx.get_node_attributes(self.graph,'pos')
+                kdTree = cKDTree(list(posList.values()))
             if not self._addNodeToRoadmap(posList, kdTree, goal, f"goal_{index}", config["mConnections"]):
                 return None
         return self.graph

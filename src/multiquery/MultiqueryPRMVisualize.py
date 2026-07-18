@@ -37,12 +37,10 @@ def multiqueryPRMVisualize(planner, solution, ax = None, nodeSize = 300):
                                width=2.0, ax = ax
                             )
     
-    # get nodes based on solution path
-    Gsp = nx.subgraph(graph,solution)
-
-    # draw edges based on solution path
-    nx.draw_networkx_edges(Gsp,pos,alpha=0.8,edge_color='g',width=5.0, label="Solution Path")
-        
+    
+    solution_edges = list(zip(solution[:-1], solution[1:]))
+    nx.draw_networkx_edges(Gsp,pos,edgelist=solution_edges,alpha=0.8,edge_color='g',width=5.0, label="Solution Path")
+    
     # draw start and goal
     if "start" in graph.nodes(): 
         nx.draw_networkx_nodes(graph,pos,nodelist=["start"],

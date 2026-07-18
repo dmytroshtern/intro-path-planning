@@ -10,7 +10,7 @@ import numpy as np
 
 benchList = list()
 
-'''
+
 # -----------------------------------------
 trapField = dict()
 trapField["obs1"] =   LineString([(6, 18), (6, 8), (16, 8), (16,18)]).buffer(1.0)
@@ -30,7 +30,7 @@ fatBottleNeckField["obs1"] = Polygon([(0, 8), (11, 8),(11, 15), (0, 15)]).buffer
 fatBottleNeckField["obs2"] = Polygon([(13, 8), (24, 8),(24, 15), (13, 15)]).buffer(.5)
 description = "Planer has to find a narrow passage with a significant extend."
 benchList.append(Benchmark("Fat bottleneck", CollisionChecker(fatBottleNeckField), [[4,21]], [[18,1]], description, 2))
-'''
+
 # -----------------------------------------
 
 myField = dict()
@@ -46,4 +46,4 @@ myField["Antenna_Head_R"] = Point(8.5, 16).buffer(1)
 
 myField["Rob_Head"] = Polygon([(2, 13), (2, 8), (8, 8), (8, 13)])
 description = "Planer has to find a passage past a robot head and the print of the LTC."
-benchList.append(Benchmark("MyField", CollisionChecker(myField), [[4,21]], [[18,1], [5, 5], [14, 14]], description, 2))
+benchList.append(Benchmark("MyField", CollisionChecker(myField), [[4,21]], [[18,1], [5, 5], [14, 14], [21, 1]], description, 2))

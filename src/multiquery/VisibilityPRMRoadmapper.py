@@ -11,6 +11,8 @@ import networkx as nx
 from scipy.spatial import cKDTree
 from IPPerfMonitor import IPPerfMonitor
 import numpy as np
+from IPVisibilityPRM import VisPRM
+from math import dist
 
 class VisibilityStatsHandler():
     
@@ -29,7 +31,7 @@ class VisibilityPRMRoadmapper(PRMBase):
     """Class implements an simplified version of a visibility PRM"""
 
     def __init__(self, _collChecker, _statsHandler = None):
-        super(VisPRM, self).__init__(_collChecker)
+        super(VisibilityPRMRoadmapper, self).__init__(_collChecker)
         self.graph = nx.Graph()
         self.statsHandler = VisibilityStatsHandler() # not yet fully customizable (s. parameters of constructors)
                 
@@ -37,8 +39,7 @@ class VisibilityPRMRoadmapper(PRMBase):
         return not self._collisionChecker.lineInCollision(pos, guardPos)
         
     def _addWeightedEdge(self, start, goal):
-        dist = np.linalg.norm(np.array(self.graph.nodes()[start]['pos']), np.array(self.graph.nodes()[goal]['pos']))
-        self.graph.add_edge(start, goal, weight=dist)
+        self.graph.add_edge(start, goal, weight=dist(self.graph.nodes[start]['pos'], self.graph.nodes[goal]['pos']))
 
     @IPPerfMonitor
     def _learnRoadmap(self, ntry):
@@ -63,7 +64,7 @@ class VisibilityPRMRoadmapper(PRMBase):
                     if self.graph.nodes()[g]['nodeType'] == 'Guard':
                         if self.statsHandler:
                             self.statsHandler.addVisTest(nodeNumber, g)
-                        if self._isVisible(q_pos,self.graph.nodes()[g]['pos']):
+                        if self._isVisible(q_pos, self.graph.nodes()[g]['pos']):
                             found = True
                             if g_vis == None:
                                 g_vis = g
@@ -89,17 +90,18 @@ class VisibilityPRMRoadmapper(PRMBase):
             nodeNumber += 1
         
     
-    def _addNodeToRoadmap(self, posList, kdTree, node, label, multipleConnections = False):
+    def _addNodeToRoadmap(self, posList, kdTree, node_pos, label, multipleConnections = False):
         '''
         optimizations
         1. allow connection between start/goal nodes -> add to KD-tree
         '''
         
-        connectionCandidates = kdTree.query(node,k=5)
+        connectionCandidates = kdTree.query(node_pos,k=5)
         result = False
-        for connectionCandidate in connectionCandidates[1]:
-            if not self._isVisible(checkedStartList[0],self.graph.nodes()[list(posList.keys())[connectionCandidate]]['pos']):
-                 self.graph.add_node(label, pos=checkedStartList[0], color='lightgreen')
+        for connectionCandidate in connectionCandidates[1]: 
+            self._isVisible(node_pos, (self.graph.nodes[list(posList.keys())[int(connectionCandidate)]]['pos']))
+            if self._isVisible(node_pos, (self.graph.nodes[list(posList.keys())[int(connectionCandidate)]]['pos'])):
+                 self.graph.add_node(label, pos=node_pos, color='lightgreen')
                  self._addWeightedEdge(label, list(posList.keys())[connectionCandidate])
                  result = True
                  if not multipleConnections:
@@ -117,7 +119,7 @@ class VisibilityPRMRoadmapper(PRMBase):
         kdTree = cKDTree(list(posList.values()))
         if not self._addNodeToRoadmap(posList, kdTree, checkedStartList[0], "start", config["mConnections"]):
             return None
-        for index, goal in ennumerate(checkedGoalList):
-            if not self._addNodeToRoadmap(posList, kdTree, checkedGoalList, f"goal_{index}", config["mConnections"]):
+        for index, goal in enumerate(checkedGoalList):
+            if not self._addNodeToRoadmap(posList, kdTree, goal, f"goal_{index}", config["mConnections"]):
                 return None
         return self.graph

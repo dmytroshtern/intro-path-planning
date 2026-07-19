@@ -30,33 +30,21 @@ class MultiQueryRoundtripPlanner:
             List[List[Any]]: A list representing the roundtrip path visiting all goals and returning to the start.
         """
 
-        roadmapWithStartAndGoals = self._roadmapPlanner.createNewRoadmapGraph(startList, goalList, config)
+        self.graph = self._roadmapPlanner.createNewRoadmapGraph(startList, goalList, config)
         
-        #fig, axes = plt.subplots()
-        #nx.draw(roadmapWithStartAndGoals, ax=axes, with_labels=True)
-
+        
         # Conversion of node names to string for consistency
-        roadmapWithStartAndGoals = nx.relabel_nodes(
-            roadmapWithStartAndGoals,
-            {node: str(node) for node in roadmapWithStartAndGoals.nodes},
-            copy=False
-        )
+        self.graph = nx.relabel_nodes(self.graph, str, copy=False)
 
-        # remove the self-loop edge if it exists
-        #if self.plannerInstance.graph.has_edge("start", "start"):
-        #    self.plannerInstance.graph.remove_edge("start", "start")
-
-        goalNodes = [node for node in roadmapWithStartAndGoals.nodes if node.startswith("goal")]
+        goalNodes = [node for node in self.graph.nodes if node.startswith("goal")]
         
-        tsg_solution = np.asarray(nx.algorithms.approximation.traveling_salesman_problem(
-            roadmapWithStartAndGoals,
-            nodes=["start"] + goalNodes,  # Include start node in the TSP solver
-            cycle=True
-        ))
-
-        if len(tsg_solution) < 2:
+        try:            
+            tsg_solution = np.asarray(nx.algorithms.approximation.traveling_salesman_problem(
+                self.graph,
+                nodes=["start"] + goalNodes,  # Include start node in the TSP solver
+                cycle=True
+            ))
+        except Exception as e:
             return []
-        
-        self.graph = roadmapWithStartAndGoals
 
         return list(tsg_solution)

@@ -47,3 +47,34 @@ myField["Antenna_Head_R"] = Point(8.5, 16).buffer(1)
 myField["Rob_Head"] = Polygon([(2, 13), (2, 8), (8, 8), (8, 13)])
 description = "Planer has to find a passage past a robot head and the print of the LTC."
 benchList.append(Benchmark("MyField", CollisionChecker(myField), [[4,21]], [[18,1], [5, 5], [14, 14], [21, 1]], description, 2))
+
+# -----------------------------------------
+def calcStarPoint(angleDeg, radius, starCenter):
+    x = radius * math.cos(math.radians(angleDeg)) + starCenter[0]
+    y = radius * math.sin(math.radians(angleDeg)) + starCenter[1]
+    return [x, y]
+
+def calcStarPolygonAndGoals(innerRad, outerRad, starCenter, tips):
+    starEndpoints = []
+    goalList = []
+    currentAngleDeg = 90
+    angleShift = 360/(tips*2)
+    for i in range(tips):
+        starEndpoints.append(calcStarPoint(currentAngleDeg, outerRad, starCenter))
+        currentAngleDeg += angleShift
+        starEndpoints.append(calcStarPoint(currentAngleDeg, innerRad, starCenter))
+        goalList.append(calcStarPoint(currentAngleDeg, (innerRad + 0.5), starCenter))
+        currentAngleDeg += angleShift
+    return Polygon(starEndpoints), goalList
+
+star = dict()
+innerRad = 1
+outerRad = 8
+starCenter = [10,10]
+tips = 7
+
+starEndpoints, goalList = calcStarPolygonAndGoals(3, 9, starCenter, tips)
+star["star"] = starEndpoints
+description = "Star with goals between the stars rays"
+benchList.append(Benchmark("Star", CollisionChecker(star), [[0, 0]], goalList, description, 2))
+

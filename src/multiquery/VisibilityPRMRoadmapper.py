@@ -95,19 +95,18 @@ class VisibilityPRMRoadmapper(PRMBase):
         optimizations
         1. allow connection between start/goal nodes -> add to KD-tree
         '''
-        
-        connectionCandidates = kdTree.query(node_pos,k=5)
+        self.graph.add_node(label, pos=node_pos, color='lightgreen')
+        connectionCandidates = kdTree.query(node_pos,k=15)
         result = False
         for connectionCandidate in connectionCandidates[1]:
-            try :
-                if self._isVisible(node_pos, (self.graph.nodes[list(posList.keys())[connectionCandidate]]['pos'])):
-                    self.graph.add_node(label, pos=node_pos, color='lightgreen')
-                    self._addWeightedEdge(label, list(posList.keys())[connectionCandidate])
-                    result = True
-                    if not multipleConnections:
-                        break
-            except Exception as e:
-                    raise ValueError(f"{connectionCandidates[1]}, {connectionCandidate}, {list(posList.keys())}")
+            if connectionCandidate == kdTree.n:
+                break
+                
+            if self._isVisible(node_pos, (self.graph.nodes[list(posList.keys())[connectionCandidate]]['pos'])):
+                self._addWeightedEdge(label, list(posList.keys())[connectionCandidate])
+                result = True
+                if not multipleConnections:
+                    break
         return result
         
         
@@ -119,12 +118,10 @@ class VisibilityPRMRoadmapper(PRMBase):
         
         posList = nx.get_node_attributes(self.graph,'pos')
         kdTree = cKDTree(list(posList.values()))
-        if not self._addNodeToRoadmap(posList, kdTree, checkedStartList[0], "start", config["mConnections"]):
-            return None
+        self._addNodeToRoadmap(posList, kdTree, checkedStartList[0], "start", config["mConnections"])
         for index, goal in enumerate(checkedGoalList):
             if config["directConnections"]:
                 posList = nx.get_node_attributes(self.graph,'pos')
                 kdTree = cKDTree(list(posList.values()))
-            if not self._addNodeToRoadmap(posList, kdTree, goal, f"goal_{index}", config["mConnections"]):
-                return None
+            self._addNodeToRoadmap(posList, kdTree, goal, f"goal_{index}", config["mConnections"])
         return self.graph

@@ -31,6 +31,83 @@ fatBottleNeckField["obs2"] = Polygon([(13, 8), (24, 8),(24, 15), (13, 15)]).buff
 description = "Planer has to find a narrow passage with a significant extend."
 benchList.append(Benchmark("Fat bottleneck", CollisionChecker(fatBottleNeckField), [[4,21]], [[18,1]], description, 2))
 
+# ----------------------------------------- 2 additional benchmarks
+
+alternatingGates = dict()
+
+limits = [[0, 30], [0, 14]]
+bar_width = 0.7
+
+for idx, x in enumerate([6, 11, 16, 21, 26]):
+    if idx % 2 == 0:
+        # obstacle grows from bottom, gap is at the top
+        alternatingGates["bar" + str(idx)] = Polygon([
+            (x - bar_width / 2, 0),
+            (x + bar_width / 2, 0),
+            (x + bar_width / 2, 9),
+            (x - bar_width / 2, 9)
+        ])
+    else:
+        # obstacle grows from top, gap is at the bottom
+        alternatingGates["bar" + str(idx)] = Polygon([
+            (x - bar_width / 2, 5),
+            (x + bar_width / 2, 5),
+            (x + bar_width / 2, 14),
+            (x - bar_width / 2, 14)
+        ])
+
+start = [[2, 7]]
+goal = [[28, 7]]
+
+description = ("The direct path from start to goal is blocked by alternating walls. The planner has to find a zig-zag path through several narrow gates.")
+benchList.append(
+    Benchmark(
+        "Alternating Gates",
+        CollisionChecker(alternatingGates, limits=limits),
+        start,
+        goal,
+        description,
+        2
+    )
+)
+
+# -----------------------------------------
+
+escapeChamber = dict()
+
+cx, cy = 11.0, 11.0
+radius = 6.0
+
+# Create an almost complete circular wall.
+# The missing part is the opening/gap.
+angles = np.linspace(np.deg2rad(110), np.deg2rad(430), 120)
+
+wall_points = [
+    (cx + np.cos(a) * radius, cy + np.sin(a) * radius)
+    for a in angles
+]
+
+escapeChamber["almost_ring"] = LineString(wall_points).buffer(0.45)
+
+start = [[11, 11]]
+goal = [[20, 11]]
+
+description = (
+    "The start configuration is inside an almost closed chamber. "
+    "The goal is outside the chamber, so the planner must find the small opening instead of trying the direct path."
+)
+
+benchList.append(
+    Benchmark(
+        "Escape Chamber",
+        CollisionChecker(escapeChamber),
+        start,
+        goal,
+        description,
+        2
+    )
+)
+
 # -----------------------------------------
 
 myField = dict()

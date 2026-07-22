@@ -1,14 +1,20 @@
-from IPPRMBase import PRMBase
 import networkx as nx
+import numpy as np
+from typing import Type, Any, List
+import matplotlib.pyplot as plt
+
+from IPPRMBase import PRMBase
 from IPPerfMonitor import IPPerfMonitor
-import NumPy as np
+from IPEnvironment import CollisionChecker
 
 class MultiQueryRoundtripPlanner:
 
-    def __init__(self, roadmapPlannerClass: Type[Any], collision_checker: CollisionChecker):
-        assert hasattr(path_planner, "createNewRoadmapGraph"), "path_planner must have a method called 'planPath'"
+    def __init__(self, roadmapPlanner: Type[Any], collisionChecker: CollisionChecker):
+        #assert hasattr(roadmapPlannerClass, "createNewRoadmapGraph"), "roadmapPlannerClass must have a method called 'createNewRoadmapGraph'"
         self.graph = nx.Graph() # graph to store all paths between start and goal nodes
-        self._roadmapPlanner = roadmapPlannerClass(collision_checker)
+        self._roadmapPlanner = roadmapPlanner
+        self.statsHandler = roadmapPlanner.statsHandler
+        self._collisionChecker = collisionChecker
 
 
     @IPPerfMonitor
@@ -24,33 +30,21 @@ class MultiQueryRoundtripPlanner:
             List[List[Any]]: A list representing the roundtrip path visiting all goals and returning to the start.
         """
 
-        roadmap = self._roadmapPlanner(startList, goalList, config)
-
-
+        self.graph = self._roadmapPlanner.createNewRoadmapGraph(startList, goalList, config)
+        
+        
         # Conversion of node names to string for consistency
-        roadmapWithStartAndGoals = nx.relabel_nodes(
-            roadmapWithStartAndGoals,
-            {node: str(node) for node in roadmapWithStartAndGoals.nodes},
-            copy=False
-        )
+        self.graph = nx.relabel_nodes(self.graph, str, copy=False)
 
-        # remove the self-loop edge if it exists
-        #if self.plannerInstance.graph.has_edge("start", "start"):
-        #    self.plannerInstance.graph.remove_edge("start", "start")
-
-        goalNodes = [node for node in roadmapWithStartAndGoals.nodes if node.startswith("goal")]
+        goalNodes = [node for node in self.graph.nodes if node.startswith("goal")]
         
-        tsg_solution = np.asarray(nx.algorithms.approximation.traveling_salesman_problem(
-            roadmapWithStartAndGoals,
-            nodes=["start"] + goalNodes,  # Include start node in the TSP solver
-            cycle=True
-        ))
-
-
-
-        if len(tsg_solution) < 2:
+        try:            
+            tsg_solution = np.asarray(nx.algorithms.approximation.traveling_salesman_problem(
+                self.graph,
+                nodes=["start"] + goalNodes,  # Include start node in the TSP solver
+                cycle=True
+            ))
+        except Exception as e:
             return []
-        
-        self.graph = self.plannerInstance.graph
 
         return list(tsg_solution)

@@ -9,7 +9,7 @@ This module implements the high-level roundtrip planning pipeline:
 4. Determine a visit order on the metagraph.
 5. Concatenate the selected pairwise paths into one final roundtrip path.
 
-The actual low-level path planning is delegated to existing lecture planners
+The actual low-level path planning is delegated to existing planners
 such as BasicPRM, LazyPRM, or VisibilityPRM.
 """
 
@@ -30,20 +30,6 @@ from .result import (
 class RoundtripPlanner:
     """
     High-level planner for roundtrip paths.
-
-    The planner follows the same general interface style as the lecture
-    planners:
-
-        planPath(startList, goalList, config)
-
-    Difference to normal planners:
-        - startList contains one start configuration.
-        - goalList contains multiple target/intermediate configurations.
-        - The returned result is a dictionary containing the final path and
-          metadata, not only a raw node list.
-
-    The RoundtripPlanner itself does not implement PRM. It receives pairwise
-    path results from a pairwise planning function/provider.
     """
 
     def __init__(self, collision_checker: Any | None = None):

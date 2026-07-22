@@ -1,5 +1,6 @@
 .venv/
-notebooks/.ipynb_checkpoints/
 __pycache__/
 *.pyc
 .python-version
+
+notebooks/

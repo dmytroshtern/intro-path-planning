@@ -8,3 +8,15 @@
 # build a metagraph with the pairwise results
 # solve the visit order using the metagraph
 # return result  
+
+
+Dimensions:
+
+Algorithm:
+    should be configuration-space based and dimension-generic if possible.
+
+Detailed path visualization:
+    acceptable to show in 2D examples, because those are directly drawable.
+
+Higher-dimensional cases:
+    can be evaluated numerically and via metagraph visualization.

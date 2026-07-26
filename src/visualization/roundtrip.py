@@ -259,6 +259,14 @@ def plot_metagraph(planner, result, ax=None):
         positions,
         edge_labels=edge_labels,
         font_size=8,
+        label_pos=0.35,
+        rotate=False,
+        bbox={
+            "boxstyle": "round,pad=0.2",
+            "facecolor": "white",
+            "edgecolor": "none",
+            "alpha": 0.85,
+        },
         ax=ax,
     )
     ax.set_title("Metagraph and selected roundtrip")

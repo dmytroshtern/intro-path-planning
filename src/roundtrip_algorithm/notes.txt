@@ -1,0 +1,10 @@
+# input: start, goals, config
+# give each node a unique name e.g. s, g1, g2 ...
+# get and store every pair 
+# for each pair: 
+#   perform prm (BasicPRM, KClosestPRM, LazyPRM, VisibilityPRM)
+#   build a roadmap (shortest path using networkx)
+#   store weight for this pair for the metagraph
+# build a metagraph with the pairwise results
+# solve the visit order using the metagraph
+# return result  

@@ -19,41 +19,51 @@ def multiqueryPRMVisualize(planner, solution, ax = None, nodeSize = 300):
 
     collChecker.drawObstacles(ax)
     
-    if statsHandler:
+    if not statsHandler:
         statPos = nx.get_node_attributes(statsHandler.graph,'pos')
         nx.draw_networkx_nodes(statsHandler.graph, pos=statPos, alpha=0.2,node_size=nodeSize)
         nx.draw_networkx_edges(statsHandler.graph, pos=statPos, alpha=0.2,edge_color='y')
         
     # draw graph 
     nx.draw_networkx_nodes(graph, pos, ax = ax, nodelist=list(color.keys()), node_color=list(color.values()), node_size=nodeSize)
-    nx.draw_networkx_edges(graph, pos, ax = ax)
+    edge_colors = [
+        graph[u][v].get("color", "black")
+        for u, v in graph.edges()
+    ]
+    nx.draw_networkx_edges(
+        graph,
+        pos,
+        ax=ax,
+        edge_color=edge_colors
+    )
     
     # draw start and goal
-    if "start" in graph.nodes(): 
-        nx.draw_networkx_nodes(graph,pos,nodelist=["start"],
-                                   node_size=nodeSize,
-                                   node_color='#00dd00',  ax = ax)
-        nx.draw_networkx_labels(graph,pos,labels={"start": "S"},  ax = ax)
+    if "S" in graph.nodes():
+        nx.draw_networkx_nodes(graph,pos,nodelist=["S"],
+                                   node_size=nodeSize*3,
+                                   node_color='#dddd00',  ax = ax)
+        nx.draw_networkx_labels(graph,pos,labels={"S": "S"},  ax = ax)
     
     for node in graph.nodes():
-        if node.startswith("goal"):
+        if node.startswith("G"):
             nx.draw_networkx_nodes(graph,pos,nodelist=[node],
-                                   node_size=nodeSize,
+                                   node_size=nodeSize*3,
                                    node_color='#dd0000',  ax = ax)
             nx.draw_networkx_labels(graph,pos,labels={node: "G"},  ax = ax)
     
     Gcc = sorted(nx.connected_components(graph), key=len, reverse=True)
+
+    '''
     G0=graph.subgraph(Gcc[0])
 
     # how largest connected component
     nx.draw_networkx_edges(G0,pos,
-                               edge_color='b',
                                width=2.0, ax = ax
                             )
-    
+    '''
     
     solution_edges = list(zip(solution[:-1], solution[1:]))
-    nx.draw_networkx_edges(graph,pos,edgelist=solution_edges,alpha=0.8,edge_color='g',width=5.0, label="Solution Path")
+    nx.draw_networkx_edges(graph,pos,edgelist=solution_edges,alpha=0.5,edge_color='lightgreen',width=5.0, label="Solution Path")
     
     
 

@@ -138,63 +138,15 @@ def _star_polygon_and_goals(inner_radius, outer_radius, center, tips):
 star_polygon, star_goals = _star_polygon_and_goals(3, 9, [10, 10], 7)
 benchList.append(
     Benchmark(
-        "Escape Chamber",
-        CollisionChecker(escapeChamber),
-        start,
-        goal,
-        description,
-        2
+        "Star",
+        CollisionChecker({"star": star_polygon}),
+        [[0, 0]],
+        star_goals,
+        "Star with goals between its rays.",
+        2,
     )
 )
 
-# -----------------------------------------
-
-myField = dict()
-myField["L"] = Polygon([(10, 16), (10, 11), (13, 11), (13,12), (11,12), (11,16)])
-myField["T"] = Polygon([(14,16), (14, 15), (15, 15),(15,11), (16,11), (16,15), (17, 15), (17, 16)])
-myField["C"] = Polygon([(19, 16), (19, 11), (22, 11), (22, 12), (20, 12), (20, 15), (22, 15), (22, 16)])
-
-myField["Antenna_L"] = Polygon([(3, 12), (1, 16), (2, 16), (4, 12)])
-myField["Antenna_Head_L"] = Point(1.5, 16).buffer(1)
-
-myField["Antenna_R"] = Polygon([(7, 12), (9, 16), (8, 16), (6, 12)])
-myField["Antenna_Head_R"] = Point(8.5, 16).buffer(1)
-
-myField["Rob_Head"] = Polygon([(2, 13), (2, 8), (8, 8), (8, 13)])
-description = "Planer has to find a passage past a robot head and the print of the LTC."
-benchList.append(Benchmark("MyField", CollisionChecker(myField), [[4,21]], [[18,1], [5, 5], [14, 14], [21, 1]], description, 2))
-
-# -----------------------------------------
-def calcStarPoint(angleDeg, radius, starCenter):
-    x = radius * math.cos(math.radians(angleDeg)) + starCenter[0]
-    y = radius * math.sin(math.radians(angleDeg)) + starCenter[1]
-    return [x, y]
-
-def calcStarPolygonAndGoals(innerRad, outerRad, starCenter, tips):
-    starEndpoints = []
-    goalList = []
-    currentAngleDeg = 90
-    angleShift = 360/(tips*2)
-    for i in range(tips):
-        starEndpoints.append(calcStarPoint(currentAngleDeg, outerRad, starCenter))
-        currentAngleDeg += angleShift
-        starEndpoints.append(calcStarPoint(currentAngleDeg, innerRad, starCenter))
-        goalList.append(calcStarPoint(currentAngleDeg, (innerRad + 0.5), starCenter))
-        currentAngleDeg += angleShift
-    return Polygon(starEndpoints), goalList
-
-star = dict()
-innerRad = 1
-outerRad = 8
-starCenter = [10,10]
-tips = 7
-
-starEndpoints, goalList = calcStarPolygonAndGoals(3, 9, starCenter, tips)
-star["star"] = starEndpoints
-description = "Star with goals between the stars rays"
-benchList.append(Benchmark("Star", CollisionChecker(star), [[0, 0]], goalList, description, 2))
-
-# ------------------------------------------
 balls = dict()
 size = 1.25
 numBalls = 25
@@ -209,12 +161,3 @@ for i, center in enumerate(ballCenters):
 
 description = "Pseudorandom balls blocking the way"
 benchList.append(Benchmark("Balls", CollisionChecker(balls), [[0, 0]], goalList, description, 2))
-
-Benchmark(
-        "Star",
-        CollisionChecker({"star": star_polygon}),
-        [[0, 0]],
-        star_goals,
-        "Star with goals between its rays.",
-        2,
-    )

@@ -34,6 +34,7 @@ def multiqueryPRMVisualize(planner, solution, ax = None, nodeSize = 300):
         graph,
         pos,
         ax=ax,
+        alpha=0.25,
         edge_color=edge_colors
     )
     

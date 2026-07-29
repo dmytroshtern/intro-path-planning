@@ -107,9 +107,11 @@ class PathOptimizer:
 
         while True:
             mid1Pos = self._findIntermediateCoordinates(posList, startNode, midNode, depth)
-            mid2Pos = self._findIntermediateCoordinates(posList, midNode, endNode, depth)
+            mid2Pos = self._findIntermediateCoordinates(posList, endNode, midNode, depth)
             expectedCost = self.euclidean(startPos, mid1Pos) + self.euclidean(mid1Pos, mid2Pos) + self.euclidean(mid2Pos, endPos)
             gain = originalCost - expectedCost
+            if depth > 10:
+                raise TypeError(f"{gain}, {gain/currentPathLength}")
             if gain/currentPathLength > self.requiredImprovement:
                 if not self._collisionChecker.lineInCollision(mid1Pos, mid2Pos):
                     mid1Label = self._generateNodeLabel()
@@ -130,8 +132,11 @@ class PathOptimizer:
         return success
 
 
-    def _findIntermediateCoordinates(self, nodePositions, startNode, endNode, depth):
-        return (np.asarray(nodePositions[startNode]) + np.asarray(nodePositions[endNode])) / pow(2, depth)
+    def _findIntermediateCoordinates(self, nodePositions, startNode, goalNode, depth):
+        start = np.asarray(nodePositions[startNode])
+        goal = np.asarray(nodePositions[goalNode])
+        goalToStart = -goal + start
+        return goal + goalToStart/pow(2, depth)
 
     def _generateNodeLabel(self):
         label = f"{self.nodeLabelPrefix}{self.nodeCounter}"

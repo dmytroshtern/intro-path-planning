@@ -1,102 +1,141 @@
-# coding: utf-8
+"""Point-robot benchmarks used by the roundtrip examples."""
 
-from IPBenchmark import Benchmark 
-from IPEnvironment import CollisionChecker
-from shapely.geometry import Point, Polygon, LineString
-import shapely.affinity
 import math
-import numpy as np
+
+from shapely.geometry import LineString, Point, Polygon
+
+from notebooks.IPBenchmark import Benchmark
+from notebooks.IPEnvironment import CollisionChecker
 
 
-benchList = list()
+benchList = []
 
 
-# -----------------------------------------
-trapField = dict()
-trapField["obs1"] =   LineString([(6, 18), (6, 8), (16, 8), (16,18)]).buffer(1.0)
-description = "Following the direct connection from goal to start would lead the algorithm into a trap."
-benchList.append(Benchmark("Trap", CollisionChecker(trapField), [[10,15]], [[10,1]], description, 2))
-
-# -----------------------------------------
-bottleNeckField = dict()
-bottleNeckField["obs1"] = LineString([(0, 13), (11, 13)]).buffer(.5)
-bottleNeckField["obs2"] = LineString([(13, 13), (23,13)]).buffer(.5)
-description = "Planer has to find a narrow passage."
-benchList.append(Benchmark("Bottleneck", CollisionChecker(bottleNeckField), [[4,15]], [[18,1]], description, 2))
-
-# -----------------------------------------
-fatBottleNeckField = dict()
-fatBottleNeckField["obs1"] = Polygon([(0, 8), (11, 8),(11, 15), (0, 15)]).buffer(.5)
-fatBottleNeckField["obs2"] = Polygon([(13, 8), (24, 8),(24, 15), (13, 15)]).buffer(.5)
-description = "Planer has to find a narrow passage with a significant extend."
-benchList.append(Benchmark("Fat bottleneck", CollisionChecker(fatBottleNeckField), [[4,21]], [[18,1]], description, 2))
-
-# ----------------------------------------- 2 additional benchmarks
-
-alternatingGates = dict()
-
-limits = [[0, 30], [0, 14]]
-bar_width = 0.7
-
-for idx, x in enumerate([6, 11, 16, 21, 26]):
-    if idx % 2 == 0:
-        # obstacle grows from bottom, gap is at the top
-        alternatingGates["bar" + str(idx)] = Polygon([
-            (x - bar_width / 2, 0),
-            (x + bar_width / 2, 0),
-            (x + bar_width / 2, 9),
-            (x - bar_width / 2, 9)
-        ])
-    else:
-        # obstacle grows from top, gap is at the bottom
-        alternatingGates["bar" + str(idx)] = Polygon([
-            (x - bar_width / 2, 5),
-            (x + bar_width / 2, 5),
-            (x + bar_width / 2, 14),
-            (x - bar_width / 2, 14)
-        ])
-
-start = [[2, 7]]
-goal = [[28, 7]]
-
-description = ("The direct path from start to goal is blocked by alternating walls. The planner has to find a zig-zag path through several narrow gates.")
+trap_field = {
+    "obs1": LineString([(6, 18), (6, 8), (16, 8), (16, 18)]).buffer(1.0)
+}
 benchList.append(
     Benchmark(
-        "Alternating Gates",
-        CollisionChecker(alternatingGates, limits=limits),
-        start,
-        goal,
-        description,
-        2
+        "Trap",
+        CollisionChecker(trap_field),
+        [[10, 15]],
+        [[10, 1]],
+        "Following the direct connection from goal to start leads into a trap.",
+        2,
     )
 )
 
-# -----------------------------------------
 
-escapeChamber = dict()
-
-cx, cy = 11.0, 11.0
-radius = 6.0
-
-# Create an almost complete circular wall.
-# The missing part is the opening/gap.
-angles = np.linspace(np.deg2rad(110), np.deg2rad(430), 120)
-
-wall_points = [
-    (cx + np.cos(a) * radius, cy + np.sin(a) * radius)
-    for a in angles
-]
-
-escapeChamber["almost_ring"] = LineString(wall_points).buffer(0.45)
-
-start = [[11, 11]]
-goal = [[20, 11]]
-
-description = (
-    "The start configuration is inside an almost closed chamber. "
-    "The goal is outside the chamber, so the planner must find the small opening instead of trying the direct path."
+bottleneck_field = {
+    "obs1": LineString([(0, 13), (11, 13)]).buffer(0.5),
+    "obs2": LineString([(13, 13), (23, 13)]).buffer(0.5),
+}
+benchList.append(
+    Benchmark(
+        "Bottleneck",
+        CollisionChecker(bottleneck_field),
+        [[4, 15]],
+        [[18, 1]],
+        "The planner has to find a narrow passage.",
+        2,
+    )
 )
 
+
+fat_bottleneck_field = {
+    "obs1": Polygon([(0, 8), (11, 8), (11, 15), (0, 15)]).buffer(0.5),
+    "obs2": Polygon([(13, 8), (24, 8), (24, 15), (13, 15)]).buffer(0.5),
+}
+benchList.append(
+    Benchmark(
+        "Fat bottleneck",
+        CollisionChecker(fat_bottleneck_field),
+        [[4, 21]],
+        [[18, 1]],
+        "The planner has to find a narrow passage with significant extent.",
+        2,
+    )
+)
+
+
+alternating_gates = {}
+bar_width = 0.7
+for index, x in enumerate([6, 11, 16, 21, 26]):
+    bottom, top = (0, 9) if index % 2 == 0 else (5, 14)
+    alternating_gates[f"bar{index}"] = Polygon(
+        [
+            (x - bar_width / 2, bottom),
+            (x + bar_width / 2, bottom),
+            (x + bar_width / 2, top),
+            (x - bar_width / 2, top),
+        ]
+    )
+
+benchList.append(
+    Benchmark(
+        "Alternating Gates",
+        CollisionChecker(alternating_gates, limits=[[0, 30], [0, 14]]),
+        [[2, 7]],
+        [[28, 7]],
+        "Alternating walls force a zig-zag path through narrow gates.",
+        2,
+    )
+)
+
+
+my_field = {
+    "L": Polygon([(10, 16), (10, 11), (13, 11), (13, 12), (11, 12), (11, 16)]),
+    "T": Polygon(
+        [(14, 16), (14, 15), (15, 15), (15, 11), (16, 11),
+         (16, 15), (17, 15), (17, 16)]
+    ),
+    "C": Polygon(
+        [(19, 16), (19, 11), (22, 11), (22, 12),
+         (20, 12), (20, 15), (22, 15), (22, 16)]
+    ),
+    "Antenna_L": Polygon([(3, 12), (1, 16), (2, 16), (4, 12)]),
+    "Antenna_Head_L": Point(1.5, 16).buffer(1),
+    "Antenna_R": Polygon([(7, 12), (9, 16), (8, 16), (6, 12)]),
+    "Antenna_Head_R": Point(8.5, 16).buffer(1),
+    "Rob_Head": Polygon([(2, 13), (2, 8), (8, 8), (8, 13)]),
+}
+benchList.append(
+    Benchmark(
+        "MyField",
+        CollisionChecker(my_field),
+        [[4, 21]],
+        [[18, 1], [5, 5], [14, 14], [21, 1]],
+        "The planner has to pass a robot head and the letters LTC.",
+        2,
+    )
+)
+
+
+def _star_point(angle, radius, center):
+    radians = math.radians(angle)
+    return [
+        radius * math.cos(radians) + center[0],
+        radius * math.sin(radians) + center[1],
+    ]
+
+
+def _star_polygon_and_goals(inner_radius, outer_radius, center, tips):
+    polygon_points = []
+    goals = []
+    angle = 90
+    angle_step = 360 / (tips * 2)
+
+    for _ in range(tips):
+        polygon_points.append(_star_point(angle, outer_radius, center))
+        angle += angle_step
+        polygon_points.append(_star_point(angle, inner_radius, center))
+        goals.append(_star_point(angle, inner_radius + 0.5, center))
+        angle += angle_step
+
+    return Polygon(polygon_points), goals
+
+
+star_polygon, star_goals = _star_polygon_and_goals(3, 9, [10, 10], 7)
 benchList.append(
     Benchmark(
         "Escape Chamber",
@@ -171,4 +210,11 @@ for i, center in enumerate(ballCenters):
 description = "Pseudorandom balls blocking the way"
 benchList.append(Benchmark("Balls", CollisionChecker(balls), [[0, 0]], goalList, description, 2))
 
-
+Benchmark(
+        "Star",
+        CollisionChecker({"star": star_polygon}),
+        [[0, 0]],
+        star_goals,
+        "Star with goals between its rays.",
+        2,
+    )

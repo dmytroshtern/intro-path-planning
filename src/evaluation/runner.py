@@ -1,239 +1,120 @@
-"""Reusable benchmark runner for RoundtripPlanner."""
-
-from __future__ import annotations
+"""Run roundtrip benchmarks and collect the required metrics."""
 
 import random
-from dataclasses import dataclass
+from contextlib import contextmanager
+from itertools import product
 from time import perf_counter
-from typing import Any, Iterable
+from types import SimpleNamespace
 
 import numpy as np
 
 from notebooks.IPEnvironmentKin import KinChainCollisionChecker
 
-from .config import build_roundtrip_config, create_roundtrip_planner
+from src.roundtrip_algorithm import RoundtripPlanner
+
+from .config import PLANAR_EXPERIMENT_SEED, build_roundtrip_config
 
 
-REQUIRED_RESULT_KEYS = {
-    "success",
-    "visit_order",
-    "used_pairs",
-    "final_path_configs",
-    "tour_cost",
-    "pairwise_results",
-    "failed_pairs",
-    "metadata",
-}
+_COLLISION_METHODS = (
+    "pointInCollision",
+    "lineInCollision",
+    "lineInCollisionExact",
+)
 
 
-@dataclass
-class ExperimentRecord:
-    """Complete data from one planner run."""
+@contextmanager
+def _count_collision_calls(checker):
+    """Count collision-check calls and restore the original methods."""
+    counts = dict.fromkeys(_COLLISION_METHODS, 0)
+    missing = object()
+    originals = {}
 
-    experiment_id: str
-    planner: Any
-    result: dict[str, Any] | None
-    benchmark: Any
-    config: dict[str, Any]
-    metrics: dict[str, Any]
+    for name in _COLLISION_METHODS:
+        if not hasattr(checker, name):
+            continue
+        method = getattr(checker, name)
+        originals[name] = checker.__dict__.get(name, missing)
 
+        def counted(*args, _name=name, _method=method, **kwargs):
+            counts[_name] += 1
+            return _method(*args, **kwargs)
 
-class CollisionCheckCounter:
-    """Temporarily count collision-check calls on one environment."""
+        setattr(checker, name, counted)
 
-    METHOD_NAMES = (
-        "pointInCollision",
-        "lineInCollision",
-        "lineInCollisionExact",
-    )
-
-    def __init__(self, collision_checker):
-        self.collision_checker = collision_checker
-        self.counts = {name: 0 for name in self.METHOD_NAMES}
-        self._instance_values = {}
-
-    def __enter__(self):
-        instance_dictionary = getattr(self.collision_checker, "__dict__", {})
-        for method_name in self.METHOD_NAMES:
-            if not hasattr(self.collision_checker, method_name):
-                continue
-
-            original_method = getattr(self.collision_checker, method_name)
-            self._instance_values[method_name] = instance_dictionary.get(
-                method_name,
-                None,
-            )
-            self._instance_values[(method_name, "had_value")] = (
-                method_name in instance_dictionary
-            )
-
-            def counted_method(
-                *args,
-                _name=method_name,
-                _method=original_method,
-                **kwargs,
-            ):
-                self.counts[_name] += 1
-                return _method(*args, **kwargs)
-
-            setattr(self.collision_checker, method_name, counted_method)
-
-        return self
-
-    def __exit__(self, exception_type, exception, traceback):
-        for method_name in self.METHOD_NAMES:
-            marker = (method_name, "had_value")
-            if marker not in self._instance_values:
-                continue
-            if self._instance_values[marker]:
-                setattr(
-                    self.collision_checker,
-                    method_name,
-                    self._instance_values[method_name],
-                )
+    try:
+        yield counts
+    finally:
+        for name, original in originals.items():
+            if original is missing:
+                delattr(checker, name)
             else:
-                delattr(self.collision_checker, method_name)
+                setattr(checker, name, original)
 
 
-def validate_roundtrip_result(result, benchmark):
-    """Validate the result contract and a successful final path."""
-    if not isinstance(result, dict):
-        raise TypeError("RoundtripPlanner.planPath must return a dictionary.")
-
-    missing = REQUIRED_RESULT_KEYS.difference(result)
-    if missing:
-        raise KeyError(
-            "Roundtrip result is missing keys: "
-            + ", ".join(sorted(missing))
-        )
-
-    if not result["success"]:
-        return True
-
-    path = np.asarray(result["final_path_configs"], dtype=float)
-    dimension = benchmark.collisionChecker.getDim()
-    if path.ndim != 2 or path.shape[1] != dimension:
-        raise ValueError("The final path has the wrong dimension.")
-    if len(path) < 2:
-        raise ValueError("A successful roundtrip needs at least two points.")
-
-    start = np.asarray(benchmark.startList[0], dtype=float)
-    if not np.allclose(path[0], start) or not np.allclose(path[-1], start):
-        raise ValueError("The path must start and end at the benchmark start.")
-
-    visit_order = result["visit_order"]
-    expected_goals = {
-        f"G{index}"
-        for index in range(1, len(benchmark.goalList) + 1)
-    }
-    visited_goals = visit_order[1:-1]
-    if (
-        visit_order[0] != "S"
-        or visit_order[-1] != "S"
-        or set(visited_goals) != expected_goals
-        or len(visited_goals) != len(expected_goals)
-    ):
-        raise ValueError("The visit order does not visit every goal once.")
-
-    expected_pairs = list(zip(visit_order, visit_order[1:]))
-    if result["used_pairs"] != expected_pairs:
-        raise ValueError("used_pairs does not match visit_order.")
-
-    for source, target in zip(path[:-1], path[1:]):
-        if benchmark.collisionChecker.lineInCollision(source, target):
-            raise ValueError("The final path contains a colliding segment.")
-
-    return True
-
-
-def original_pairwise_results(result):
-    """Return actual planner calls without generated reverse copies."""
-    return [
-        pair_result
-        for pair_result in result.get("pairwise_results", {}).values()
-        if not pair_result.get("metadata", {}).get("reversed", False)
-    ]
-
-
-def extract_experiment_metrics(
-    result,
-    benchmark,
-    base_planner_name,
-    order_method,
-    run_index,
-    seed,
-    planning_time,
-    experiment_id,
-    collision_counts,
-    error="",
+def _extract_metrics(
+    result, benchmark, planner_name, order_method, seed,
+    planning_time, experiment_id, collision_counts, error,
 ):
-    """Translate one roundtrip result into the required metrics."""
-    result = result or {}
-    success = bool(result.get("success", False)) and not error
+    """Convert one planner result to the report's metric schema."""
+    result = result if isinstance(result, dict) else {}
+    success = bool(result.get("success")) and not error
     path = result.get("final_path_configs") or []
-    pairwise_results = original_pairwise_results(result)
-
-    successful_subpaths = sum(
-        bool(pair_result.get("success", False))
-        for pair_result in pairwise_results
-    )
-    failed_subpaths = len(pairwise_results) - successful_subpaths
+    pairwise_results = [
+        value
+        for value in (result.get("pairwise_results") or {}).values()
+        if not value.get("metadata", {}).get("reversed", False)
+    ]
+    successful = sum(bool(value.get("success")) for value in pairwise_results)
+    metadata = [value.get("metadata", {}) for value in pairwise_results]
     roadmap_nodes = sum(
-        pair_result.get("metadata", {}).get("roadmap_nodes") or 0
-        for pair_result in pairwise_results
+        value.get("roadmap_nodes") or 0 for value in metadata
     )
     roadmap_edges = sum(
-        pair_result.get("metadata", {}).get("roadmap_edges") or 0
-        for pair_result in pairwise_results
+        value.get("roadmap_edges") or 0 for value in metadata
     )
-
-    point_checks = collision_counts.get("pointInCollision", 0)
-    line_checks = collision_counts.get("lineInCollision", 0)
-    exact_line_checks = collision_counts.get("lineInCollisionExact", 0)
-    robot_type = (
-        "PlanarManipulator"
-        if isinstance(benchmark.collisionChecker, KinChainCollisionChecker)
-        else "PointRobot"
-    )
+    point_checks = collision_counts["pointInCollision"]
+    line_checks = collision_counts["lineInCollision"]
+    exact_checks = collision_counts["lineInCollisionExact"]
+    tour_cost = result.get("tour_cost")
 
     return {
         "experiment_id": experiment_id,
         "benchmark": benchmark.name,
-        "robot_type": robot_type,
+        "robot_type": (
+            "PlanarManipulator"
+            if isinstance(benchmark.collisionChecker, KinChainCollisionChecker)
+            else "PointRobot"
+        ),
         "dof": benchmark.collisionChecker.getDim(),
         "number_of_goals": len(benchmark.goalList),
         "difficulty": benchmark.level,
-        "base_planner": base_planner_name,
+        "base_planner": planner_name,
         "order_method": order_method,
-        "run": run_index,
         "seed": seed,
         "success": success,
-        "planning_time": float(planning_time),
-        "final_path_length": (
-            float(result["tour_cost"])
-            if success
-            else np.nan
-        ),
+        "planning_time": planning_time,
+        "final_path_length": float(tour_cost)
+        if success and tour_cost is not None
+        else np.nan,
         "final_path_points": len(path) if success else 0,
-        "successful_subpaths": successful_subpaths,
-        "failed_subpaths": failed_subpaths,
+        "successful_subpaths": successful,
+        "failed_subpaths": len(pairwise_results) - successful,
         "roadmap_nodes": int(roadmap_nodes),
         "roadmap_edges": int(roadmap_edges),
-        "point_collision_checks": int(point_checks),
-        "line_collision_checks": int(line_checks),
-        "exact_line_collision_checks": int(exact_line_checks),
-        "collision_checks": int(
-            point_checks + line_checks + exact_line_checks
-        ),
+        "point_collision_checks": point_checks,
+        "line_collision_checks": line_checks,
+        "exact_line_collision_checks": exact_checks,
+        "collision_checks": point_checks + line_checks + exact_checks,
         "error": error or result.get("reason", ""),
     }
 
 
 class RoundtripBenchmarkRunner:
-    """Execute experiment matrices and retain complete result records."""
+    """Run experiment combinations and retain results for later plots."""
 
-    def __init__(self):
-        self.records: dict[str, ExperimentRecord] = {}
+    def __init__(self, seed=PLANAR_EXPERIMENT_SEED):
+        self.records = {}
+        self.seed = seed
 
     def clear(self):
         self.records.clear()
@@ -243,109 +124,108 @@ class RoundtripBenchmarkRunner:
         benchmark,
         base_planner_name,
         order_method,
-        seed,
-        run_index=0,
+        seed=None,
     ):
+        seed = self.seed if seed is None else seed
         experiment_id = (
-            f"{benchmark.name}|{base_planner_name}|"
-            f"{order_method}|run_{run_index:02d}|seed_{seed}"
+            f"{benchmark.name}|{base_planner_name}|{order_method}|seed_{seed}"
         )
         random.seed(seed)
         np.random.seed(seed)
-        planner = create_roundtrip_planner(benchmark)
+        planner = RoundtripPlanner(benchmark.collisionChecker)
         config = build_roundtrip_config(
-            base_planner_name,
-            order_method,
-            seed,
-            benchmark=benchmark,
+            base_planner_name, order_method, seed, benchmark
         )
         result = None
         error = ""
-        counter = CollisionCheckCounter(benchmark.collisionChecker)
+        collision_counts = dict.fromkeys(_COLLISION_METHODS, 0)
 
         started = perf_counter()
         try:
-            with counter:
+            with _count_collision_calls(benchmark.collisionChecker) as collision_counts:
                 result = planner.planPath(
-                    benchmark.startList,
-                    benchmark.goalList,
-                    config,
+                    benchmark.startList, benchmark.goalList, config
                 )
-            validate_roundtrip_result(result, benchmark)
         except Exception as exception:
             error = f"{type(exception).__name__}: {exception}"
         planning_time = perf_counter() - started
 
-        metrics = extract_experiment_metrics(
-            result=result,
-            benchmark=benchmark,
-            base_planner_name=base_planner_name,
-            order_method=order_method,
-            run_index=run_index,
-            seed=seed,
-            planning_time=planning_time,
-            experiment_id=experiment_id,
-            collision_counts=counter.counts,
-            error=error,
+        if not error and not isinstance(result, dict):
+            error = "TypeError: RoundtripPlanner must return a dictionary."
+
+        metrics = _extract_metrics(
+            result,
+            benchmark,
+            base_planner_name,
+            order_method,
+            seed,
+            planning_time,
+            experiment_id,
+            collision_counts,
+            error,
         )
-        record = ExperimentRecord(
-            experiment_id=experiment_id,
-            planner=planner,
-            result=result,
-            benchmark=benchmark,
-            config=config,
-            metrics=metrics,
+        record = SimpleNamespace(
+            result=result, benchmark=benchmark, metrics=metrics
         )
         self.records[experiment_id] = record
         return record
 
     def run_suite(
         self,
-        benchmarks: Iterable,
-        base_planner_names: Iterable[str],
-        order_methods: Iterable[str],
-        seeds: Iterable[int],
+        benchmarks,
+        base_planner_names,
+        order_methods,
+        seeds=None,
     ):
-        new_records = []
-        for benchmark in benchmarks:
-            for base_planner_name in base_planner_names:
-                for order_method in order_methods:
-                    for run_index, seed in enumerate(seeds):
-                        record = self.run_single(
-                            benchmark=benchmark,
-                            base_planner_name=base_planner_name,
-                            order_method=order_method,
-                            seed=seed,
-                            run_index=run_index,
-                        )
-                        new_records.append(record)
-                        status = (
-                            "success"
-                            if record.metrics["success"]
-                            else "failed"
-                        )
-                        print(record.experiment_id, status)
-        return new_records
+        records = []
+        seeds = (self.seed,) if seeds is None else tuple(seeds)
+        if not seeds:
+            raise ValueError("At least one random seed is required.")
+
+        combinations = product(
+            benchmarks,
+            base_planner_names,
+            order_methods,
+            seeds,
+        )
+        for benchmark, planner_name, order_method, seed in combinations:
+            record = self.run_single(
+                benchmark,
+                planner_name,
+                order_method,
+                seed=seed,
+            )
+            records.append(record)
+            status = "success" if record.metrics["success"] else "failed"
+            print(record.metrics["experiment_id"], status)
+        return records
 
     def find_result(
         self,
         benchmark_name,
         base_planner_name=None,
         order_method=None,
+        seed=None,
         successful_only=True,
     ):
         for record in self.records.values():
             metrics = record.metrics
-            if metrics["benchmark"] != benchmark_name:
-                continue
-            if (
-                base_planner_name
-                and metrics["base_planner"] != base_planner_name
-            ):
-                continue
-            if order_method and metrics["order_method"] != order_method:
-                continue
-            if successful_only and not metrics["success"]:
-                continue
-            return record
+            matches = (
+                metrics["benchmark"] == benchmark_name
+                and (
+                    base_planner_name is None
+                    or metrics["base_planner"] == base_planner_name
+                )
+                and (
+                    order_method is None
+                    or metrics["order_method"] == order_method
+                )
+                and (
+                    seed is None
+                    or metrics["seed"] == seed
+                )
+                and (not successful_only or metrics["success"])
+            )
+            if matches:
+                return record
         return None

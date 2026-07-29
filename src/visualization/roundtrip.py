@@ -1,9 +1,5 @@
 """Static visualizations for roundtrip-planning results."""
 
-from __future__ import annotations
-
-from typing import Any
-
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
@@ -11,8 +7,8 @@ import numpy as np
 from notebooks.IPEnvironmentKin import KinChainCollisionChecker
 
 
-PAIRWISE_COLOR = "#9aa0a6"
-SELECTED_COLORS = (
+_PAIRWISE_COLOR = "#9aa0a6"
+_TOUR_COLORS = (
     "#1f77b4",
     "#ff7f0e",
     "#2ca02c",
@@ -22,13 +18,14 @@ SELECTED_COLORS = (
 )
 
 
-def _require_success(result: dict[str, Any]) -> None:
+def _require_success(result):
+    """Raise a clear error when a failed roundtrip is visualized."""
     if not result.get("success", False):
         reason = result.get("reason", "unknown reason")
         raise ValueError(f"Cannot visualize a failed roundtrip: {reason}")
 
 
-def _configure_axis(benchmark, ax) -> None:
+def _configure_axis(benchmark, ax):
     environment = benchmark.collisionChecker
     limits = environment.getEnvironmentLimits()
     ax.set_xlim(limits[0])
@@ -45,7 +42,7 @@ def _configure_axis(benchmark, ax) -> None:
         ax.set_ylabel("y")
 
 
-def _draw_required_configurations(benchmark, ax, show_labels=True) -> None:
+def _draw_required_configurations(benchmark, ax, show_labels=True):
     start = np.asarray(benchmark.startList[0], dtype=float)
     goals = np.asarray(benchmark.goalList, dtype=float)
 
@@ -90,7 +87,7 @@ def _draw_path(
     alpha=1.0,
     label=None,
     arrows=False,
-) -> None:
+):
     points = np.asarray(path, dtype=float)
     if points.ndim != 2 or points.shape[1] != 2 or len(points) < 2:
         return
@@ -121,77 +118,89 @@ def _draw_path(
             )
 
 
-def _successful_pairwise_results(result):
-    """Yield successful planner calls without generated reverse copies."""
-    for pair_result in result.get("pairwise_results", {}).values():
-        metadata = pair_result.get("metadata", {})
-        if metadata.get("reversed", False):
-            continue
-        if pair_result.get("success", False):
-            yield pair_result
+def plot_roundtrip_components(result, benchmark):
+    """Show the required 2-DoF roundtrip elements in one figure."""
+    if not result.get("success", False):
+        reason = result.get("reason", "unknown reason")
+        raise ValueError(f"Cannot visualize a failed roundtrip: {reason}")
+    if benchmark.collisionChecker.getDim() != 2:
+        raise ValueError("Roundtrip component plots require 2 DoF.")
 
+    figure, axes = plt.subplots(1, 2, figsize=(16, 7))
+    pairwise_ax, tour_ax = axes
 
-def _draw_pairwise_paths(result, benchmark, ax):
-    _configure_axis(benchmark, ax)
-    for index, pair_result in enumerate(
-        _successful_pairwise_results(result)
-    ):
+    _configure_axis(benchmark, pairwise_ax)
+    pairwise_results = [
+        pair_result
+        for pair_result in result.get("pairwise_results", {}).values()
+        if pair_result.get("success", False)
+        and not pair_result.get("metadata", {}).get("reversed", False)
+    ]
+    for index, pair_result in enumerate(pairwise_results):
         _draw_path(
-            ax,
+            pairwise_ax,
             pair_result["path_configs"],
-            color=PAIRWISE_COLOR,
+            color=_PAIRWISE_COLOR,
             linewidth=1.2,
             alpha=0.55,
             label="Successful pairwise paths" if index == 0 else None,
         )
-    _draw_required_configurations(benchmark, ax)
-    ax.set_title("Planned pairwise subpaths")
-    ax.legend(loc="best")
+    for index, pair in enumerate(result["used_pairs"]):
+        pair_result = result["pairwise_results"][tuple(pair)]
+        _draw_path(
+            pairwise_ax,
+            pair_result["path_configs"],
+            color="#4c78a8",
+            linewidth=2.4,
+            alpha=0.9,
+            label="Selected subpaths" if index == 0 else None,
+        )
+    _draw_required_configurations(benchmark, pairwise_ax)
+    pairwise_ax.set_title("Planned pairwise subpaths")
+    pairwise_ax.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.13),
+        ncol=2,
+        fontsize=8,
+        frameon=True,
+    )
 
-
-def _draw_selected_tour(result, benchmark, ax):
-    _configure_axis(benchmark, ax)
+    _configure_axis(benchmark, tour_ax)
     _draw_path(
-        ax,
+        tour_ax,
         result["final_path_configs"],
         color="#8bbce5",
         linewidth=6.0,
         alpha=0.55,
         label="Final combined path",
     )
-
     for index, pair in enumerate(result["used_pairs"]):
         pair_result = result["pairwise_results"][tuple(pair)]
-        color = SELECTED_COLORS[index % len(SELECTED_COLORS)]
+        color = _TOUR_COLORS[index % len(_TOUR_COLORS)]
         _draw_path(
-            ax,
+            tour_ax,
             pair_result["path_configs"],
             color=color,
             linewidth=2.6,
             label=f"{pair[0]} → {pair[1]}",
             arrows=True,
         )
-    _draw_required_configurations(benchmark, ax)
-    ax.set_title(
+    _draw_required_configurations(benchmark, tour_ax)
+    tour_ax.set_title(
         "Selected roundtrip: "
         + " → ".join(result["visit_order"])
         + f"\nFinal path length: {result['tour_cost']:.2f}"
     )
-    ax.legend(loc="best", fontsize=8, ncol=2)
+    tour_ax.legend(
+        loc="upper center",
+        bbox_to_anchor=(0.5, -0.13),
+        fontsize=8,
+        ncol=3,
+        frameon=True,
+    )
 
-
-def plot_roundtrip_components(result, benchmark):
-    """Show the required 2-DoF roundtrip elements in one figure."""
-    _require_success(result)
-    if benchmark.collisionChecker.getDim() != 2:
-        raise ValueError("Roundtrip component plots require 2 DoF.")
-
-    figure, axes = plt.subplots(1, 2, figsize=(14, 6))
-
-    _draw_pairwise_paths(result, benchmark, axes[0])
-    _draw_selected_tour(result, benchmark, axes[1])
     figure.suptitle(benchmark.name, fontsize=15)
-    figure.tight_layout()
+    figure.tight_layout(rect=(0, 0.12, 1, 0.96))
     return figure, axes
 
 

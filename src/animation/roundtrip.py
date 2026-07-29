@@ -1,9 +1,6 @@
-"""Animations for PointRobot and PlanarManipulator roundtrip paths."""
-
-from __future__ import annotations
+"""Roundtrip animations based on the lecture animation utilities."""
 
 from copy import deepcopy
-from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,41 +9,48 @@ from matplotlib.animation import FuncAnimation
 
 from notebooks.IPEnvironmentKin import (
     KinChainCollisionChecker,
+    interpolate_line,
     planarRobotVisualize,
 )
 
 
-def _require_success(result: dict[str, Any]) -> np.ndarray:
-    if not result.get("success", False):
-        reason = result.get("reason", "unknown reason")
-        raise ValueError(f"Cannot animate a failed roundtrip: {reason}")
-
+def _result_path(result):
+    if not result.get("success"):
+        raise ValueError(
+            "Cannot animate a failed roundtrip: "
+            + result.get("reason", "unknown reason")
+        )
     path = np.asarray(result["final_path_configs"], dtype=float)
     if path.ndim != 2 or len(path) < 2:
-        raise ValueError("The final path must contain at least two configurations.")
+        raise ValueError("The final path needs at least two configurations.")
     return path
 
 
-def interpolate_path(path, frames_per_segment=10):
-    """Linearly interpolate every path segment for smooth playback."""
-    path = np.asarray(path, dtype=float)
+def _interpolate_path(path, frames_per_segment):
+    """Apply the lecture interpolation to every roundtrip segment."""
     if frames_per_segment < 1:
         raise ValueError("frames_per_segment must be at least one.")
 
-    interpolated = [path[0]]
+    frames = [path[0]]
     for start, target in zip(path[:-1], path[1:]):
-        for fraction in np.linspace(
-            0.0,
-            1.0,
-            frames_per_segment + 1,
-        )[1:]:
-            interpolated.append(start + fraction * (target - start))
-    return np.asarray(interpolated)
+        distance = np.linalg.norm(target - start)
+        if np.isclose(distance, 0.0):
+            continue
+
+        segment = interpolate_line(
+            start,
+            target,
+            distance / frames_per_segment,
+        )
+        if not np.allclose(segment[-1], target):
+            segment.append(target)
+        frames.extend(segment[1:])
+    return np.asarray(frames)
 
 
-def _draw_required_points(benchmark, ax) -> None:
-    start = np.asarray(benchmark.startList[0], dtype=float)
-    goals = np.asarray(benchmark.goalList, dtype=float)
+def _draw_start_and_goals(benchmark, ax):
+    start = np.asarray(benchmark.startList[0])
+    goals = np.asarray(benchmark.goalList)
     ax.scatter(
         start[0],
         start[1],
@@ -55,7 +59,7 @@ def _draw_required_points(benchmark, ax) -> None:
         color="#2ca02c",
         edgecolor="black",
         label="Start",
-        zorder=15,
+        zorder=10,
     )
     ax.scatter(
         goals[:, 0],
@@ -65,8 +69,140 @@ def _draw_required_points(benchmark, ax) -> None:
         color="#d62728",
         edgecolor="black",
         label="Goals",
+        zorder=10,
+    )
+
+
+def _draw_path_progress(ax, path, frames, frame_index, marker_label):
+    ax.plot(
+        path[:, 0],
+        path[:, 1],
+        color="#b8c5d6",
+        linewidth=2,
+        label="Final path",
+    )
+    trace = frames[: frame_index + 1]
+    ax.plot(
+        trace[:, 0],
+        trace[:, 1],
+        color="#0057b8",
+        linewidth=3,
+        label="Travelled path",
+    )
+    ax.scatter(
+        *frames[frame_index],
+        s=120,
+        color="#ffbf00",
+        edgecolor="black",
+        label=marker_label,
         zorder=15,
     )
+
+
+def _configure_axis(ax, limits, xlabel, ylabel):
+    ax.set_xlim(limits[0])
+    ax.set_ylim(limits[1])
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.grid(alpha=0.2)
+
+
+def _workspace_references(robot, benchmark):
+    """Precompute the workspace poses of start and goal configurations."""
+    reference_robot = deepcopy(robot)
+    required = [("S", benchmark.startList[0])]
+    required.extend(
+        (f"G{index}", goal)
+        for index, goal in enumerate(benchmark.goalList, start=1)
+    )
+
+    poses = []
+    for label, configuration in required:
+        reference_robot.move(configuration)
+        poses.append(
+            (
+                label,
+                np.asarray(reference_robot.get_transforms()),
+            )
+        )
+
+    return poses
+
+
+def _draw_workspace_targets(ax, poses):
+    """Mark 2-DoF start and goal positions in the workspace."""
+    for index, (label, points) in enumerate(poses):
+        is_start = label == "S"
+        color = "#2ca02c" if is_start else "#d62728"
+        ax.scatter(
+            *points[-1],
+            color=color,
+            marker="*" if is_start else "X",
+            edgecolor="black",
+            s=120 if is_start else 75,
+            zorder=8,
+            label=(
+                "Start"
+                if is_start
+                else "Goals" if index == 1 else None
+            ),
+        )
+        ax.annotate(
+            label,
+            points[-1],
+            xytext=(6, 6),
+            textcoords="offset points",
+            color=color,
+            fontweight="bold",
+        )
+
+
+def _draw_workspace_references(ax, poses):
+    """Show required 4- or 6-DoF robot poses in the workspace."""
+    for index, (label, points) in enumerate(poses):
+        is_start = label == "S"
+        color = "#2ca02c" if is_start else "#d62728"
+        ax.plot(
+            points[:, 0],
+            points[:, 1],
+            color=color,
+            linestyle="--",
+            linewidth=1.5,
+            alpha=0.3,
+            label=(
+                "Start configuration"
+                if is_start
+                else "Goal configurations" if index == 1 else None
+            ),
+        )
+        end_effector = points[-1]
+        ax.scatter(
+            *end_effector,
+            color=color,
+            s=45,
+            alpha=0.65,
+            zorder=8,
+        )
+        ax.annotate(
+            label,
+            end_effector,
+            xytext=(6, 6),
+            textcoords="offset points",
+            color=color,
+            fontweight="bold",
+        )
+
+def _animation_html(figure, update, number_of_frames, interval):
+    animation = FuncAnimation(
+        figure,
+        update,
+        frames=number_of_frames,
+        interval=interval,
+    )
+    html = HTML(animation.to_jshtml())
+    plt.close(figure)
+    return html
 
 
 def animate_point_roundtrip(
@@ -75,104 +211,36 @@ def animate_point_roundtrip(
     frames_per_segment=10,
     interval=60,
 ):
-    """Animate a 2-DoF PointRobot along the final roundtrip."""
-    path = _require_success(result)
+    """Animate a 2-DoF PointRobot in its environment."""
+    path = _result_path(result)
+    environment = benchmark.collisionChecker
     if (
-        benchmark.collisionChecker.getDim() != 2
-        or isinstance(benchmark.collisionChecker, KinChainCollisionChecker)
+        environment.getDim() != 2
+        or isinstance(environment, KinChainCollisionChecker)
     ):
         raise TypeError("A 2-DoF PointRobot benchmark is required.")
 
-    frames = interpolate_path(path, frames_per_segment)
-    limits = benchmark.collisionChecker.getEnvironmentLimits()
+    frames = _interpolate_path(path, frames_per_segment)
+    limits = environment.getEnvironmentLimits()
     figure, ax = plt.subplots(figsize=(8, 7))
+    title = f"{benchmark.name}: {' → '.join(result['visit_order'])}"
 
     def update(frame_index):
         ax.clear()
-        benchmark.collisionChecker.drawObstacles(ax)
-        ax.plot(
-            path[:, 0],
-            path[:, 1],
-            color="#b8c5d6",
-            linewidth=2.0,
-            label="Final path",
+        environment.drawObstacles(ax)
+        _draw_path_progress(
+            ax,
+            path,
+            frames,
+            frame_index,
+            marker_label="PointRobot",
         )
-        _draw_required_points(benchmark, ax)
-        trace = frames[: frame_index + 1]
-        ax.plot(
-            trace[:, 0],
-            trace[:, 1],
-            color="#0057b8",
-            linewidth=3.0,
-            label="Travelled path",
-        )
-        ax.scatter(
-            frames[frame_index, 0],
-            frames[frame_index, 1],
-            s=130,
-            color="#ffbf00",
-            edgecolor="black",
-            zorder=20,
-            label="PointRobot",
-        )
-        ax.set_xlim(limits[0])
-        ax.set_ylim(limits[1])
-        ax.set_aspect("equal", adjustable="box")
-        ax.set_xlabel("x")
-        ax.set_ylabel("y")
-        ax.set_title(
-            f"{benchmark.name}: "
-            + " → ".join(result["visit_order"])
-        )
-        ax.grid(alpha=0.2)
+        _draw_start_and_goals(benchmark, ax)
+        _configure_axis(ax, limits, "x", "y")
+        ax.set_title(title)
         ax.legend(loc="best")
 
-    animation = FuncAnimation(
-        figure,
-        update,
-        frames=len(frames),
-        interval=interval,
-    )
-    html = HTML(animation.to_jshtml())
-    plt.close(figure)
-    return html
-
-
-def _workspace_limits(environment):
-    robot = environment.kin_chain
-    reach = sum(float(joint.a) for joint in robot.joints)
-    obstacle_bounds = [
-        geometry.bounds for geometry in environment.scene.values()
-    ]
-    if obstacle_bounds:
-        reach = max(
-            reach,
-            max(abs(value) for bounds in obstacle_bounds for value in bounds),
-        )
-    margin = 0.5
-    return [[-reach - margin, reach + margin]] * 2
-
-
-def _draw_planar_robot(robot, ax):
-    planarRobotVisualize(robot, ax)
-    transforms = np.asarray(robot.get_transforms(), dtype=float)
-    ax.scatter(
-        transforms[:, 0],
-        transforms[:, 1],
-        s=40,
-        color="#1f1f1f",
-        zorder=10,
-    )
-    ax.scatter(
-        transforms[-1, 0],
-        transforms[-1, 1],
-        s=80,
-        marker="X",
-        color="#ffbf00",
-        edgecolor="black",
-        zorder=11,
-        label="End effector",
-    )
+    return _animation_html(figure, update, len(frames), interval)
 
 
 def animate_planar_roundtrip(
@@ -182,28 +250,29 @@ def animate_planar_roundtrip(
     frames_per_segment=8,
     interval=60,
 ):
-    """Animate a 2-DoF or 4-DoF PlanarManipulator in workspace."""
-    path = _require_success(result)
+    """Animate a PlanarRobot roundtrip in the workspace."""
+    path = _result_path(result)
     environment = benchmark.collisionChecker
     if not isinstance(environment, KinChainCollisionChecker):
         raise TypeError("A PlanarManipulator benchmark is required.")
-    if path.shape[1] != environment.getDim():
-        raise ValueError("Path dimension does not match the manipulator.")
 
-    frames = interpolate_path(path, frames_per_segment)
+    frames = _interpolate_path(path, frames_per_segment)
     robot = deepcopy(environment.kin_chain)
-    limits = workspace_limits or _workspace_limits(environment)
-    show_configuration_space = environment.getDim() == 2
-
-    if show_configuration_space:
+    dof = environment.getDim()
+    if workspace_limits is None:
+        reach = sum(joint.a for joint in robot.joints) + 0.5
+        workspace_limits = [[-reach, reach], [-reach, reach]]
+    workspace_poses = _workspace_references(robot, benchmark)
+    if dof == 2:
+        configuration_limits = environment.getEnvironmentLimits()
         figure, (workspace_ax, configuration_ax) = plt.subplots(
-            1,
-            2,
-            figsize=(14, 7),
+            1, 2, figsize=(14, 7)
         )
     else:
-        figure, workspace_ax = plt.subplots(figsize=(8, 7))
         configuration_ax = None
+        figure, workspace_ax = plt.subplots(figsize=(8, 7))
+
+    title = f"{benchmark.name}: {' → '.join(result['visit_order'])}"
 
     def update(frame_index):
         configuration = frames[frame_index]
@@ -211,66 +280,43 @@ def animate_planar_roundtrip(
 
         workspace_ax.clear()
         environment.drawObstacles(workspace_ax, inWorkspace=True)
-        _draw_planar_robot(robot, workspace_ax)
-        workspace_ax.set_xlim(limits[0])
-        workspace_ax.set_ylim(limits[1])
-        workspace_ax.set_aspect("equal", adjustable="box")
-        workspace_ax.set_xlabel("x")
-        workspace_ax.set_ylabel("y")
-        workspace_ax.set_title(
-            f"{environment.getDim()}-DoF PlanarManipulator in workspace"
+        if dof == 2:
+            _draw_workspace_targets(workspace_ax, workspace_poses)
+        else:
+            _draw_workspace_references(workspace_ax, workspace_poses)
+        planarRobotVisualize(robot, workspace_ax)
+        workspace_ax.plot(
+            [],
+            [],
+            color="green",
+            linewidth=3,
+            label="Current robot",
         )
-        workspace_ax.grid(alpha=0.2)
-        workspace_ax.legend(loc="upper right")
+        _configure_axis(workspace_ax, workspace_limits, "x", "y")
+        workspace_ax.set_title(
+            f"{dof}-DoF PlanarManipulator in workspace"
+        )
+        workspace_ax.legend(loc="upper right", fontsize=8)
 
         if configuration_ax is not None:
             configuration_ax.clear()
-            configuration_limits = environment.getEnvironmentLimits()
-            configuration_ax.plot(
-                path[:, 0],
-                path[:, 1],
-                color="#b8c5d6",
-                linewidth=2.0,
-                label="Final path",
+            _draw_path_progress(
+                configuration_ax,
+                path,
+                frames,
+                frame_index,
+                marker_label="Current configuration",
             )
-            trace = frames[: frame_index + 1]
-            configuration_ax.plot(
-                trace[:, 0],
-                trace[:, 1],
-                color="#0057b8",
-                linewidth=3.0,
-                label="Travelled path",
+            _draw_start_and_goals(benchmark, configuration_ax)
+            _configure_axis(
+                configuration_ax,
+                configuration_limits,
+                r"$q_1$ [rad]",
+                r"$q_2$ [rad]",
             )
-            configuration_ax.scatter(
-                configuration[0],
-                configuration[1],
-                s=110,
-                color="#ffbf00",
-                edgecolor="black",
-                zorder=10,
-                label="Current configuration",
-            )
-            _draw_required_points(benchmark, configuration_ax)
-            configuration_ax.set_xlim(configuration_limits[0])
-            configuration_ax.set_ylim(configuration_limits[1])
-            configuration_ax.set_aspect("equal", adjustable="box")
-            configuration_ax.set_xlabel(r"$q_1$ [rad]")
-            configuration_ax.set_ylabel(r"$q_2$ [rad]")
             configuration_ax.set_title("Configuration space")
-            configuration_ax.grid(alpha=0.2)
             configuration_ax.legend(loc="best", fontsize=8)
 
-        figure.suptitle(
-            f"{benchmark.name}: "
-            + " → ".join(result["visit_order"])
-        )
+        figure.suptitle(title)
 
-    animation = FuncAnimation(
-        figure,
-        update,
-        frames=len(frames),
-        interval=interval,
-    )
-    html = HTML(animation.to_jshtml())
-    plt.close(figure)
-    return html
+    return _animation_html(figure, update, len(frames), interval)

@@ -12,6 +12,9 @@ class PathOptimizer:
 
     def __init__(self, collisionChecker: CollisionChecker):
         self._collisionChecker = collisionChecker
+        self.nodeLabelPrefix = "del"
+        self.nodeCounter = 0
+        self.requiredImprovement = 0.01
 
     def euclidean(self, a, b):
         return np.linalg.norm(np.array(a) - np.array(b))
@@ -29,39 +32,41 @@ class PathOptimizer:
         optimizedPairs = []
         posList = nx.get_node_attributes(graph, 'pos')
 
-        initialPathLength = gu.pathLength(graph, path)
-        oldPathLength = initialPathLength
         improved = True
 
         while improved:
             improved = False
 
-            candidates = self.findPossibleShorcuts(graph, optimizedPairs, path, posList)
+            candidates = self._rankPotentialShortcuts(graph, optimizedPairs, path, posList)
 
             for gain, i in candidates:
-                if gain <= 0:
-                    continue
-
-                a = path[i]
-                b = path[i+2]
 
                 # Direct shortcut
-                if not self._collisionChecker.lineInCollision(posList[a], posList[b]):
-                    path = path[:i + 1] + path[i+2:]
-                    gu.addWeightedEdge(graph, a, b)
+                startNode = path[i]
+                endNode = path[i + 2]
+                if not self._collisionChecker.lineInCollision(posList[startNode], posList[endNode]):
+                    del path[i+1]
+                    gu.addWeightedEdge(graph, startNode, endNode)
                     improved = True
                     break
 
                 # Intermediate Point search
+                if self._delTreeAlgorithm(graph, posList, path, i):
+                    # Update needed since we added nodes
+                    posList = nx.get_node_attributes(graph, 'pos')
+                    improved = True
+                    break
 
 
-                optimizedPairs.append((a, b))
+
+                optimizedPairs.append((startNode, endNode))
 
 
         return path, graph
 
-    def findPossibleShorcuts(self, graph: nx.Graph, optimizedPairs: list[Any], path, posList: dict[_Node, Any]):
+    def _rankPotentialShortcuts(self, graph: nx.Graph, optimizedPairs: list[Any], path, posList):
         candidates = []
+        currentPathLength = gu.pathLength(graph, path)
         for i in range(len(path) - 2):
             # Don't skip a goal
             if path[i + 1].startswith("G"):
@@ -78,11 +83,57 @@ class PathOptimizer:
             )
 
             gain = old_cost - direct_cost
-
-            candidates.append(
-                (gain, i)
-            )
+            if gain/currentPathLength > self.requiredImprovement:
+                candidates.append(
+                    (gain, i)
+                )
 
         # Try biggest improvement first
         candidates.sort(reverse=True)
         return candidates
+
+    def _delTreeAlgorithm(self, graph, posList, path, startIndex):
+        success = False
+        depth = 1
+        startNode = path[startIndex]
+        midNode = path[startIndex + 1]
+        endNode = path[startIndex + 2]
+
+        startPos = posList[startNode]
+        endPos = posList[endNode]
+
+        currentPathLength = gu.pathLength(graph, path)
+        originalCost = gu.pathLength(graph, path[startIndex:startIndex + 3])
+
+        while True:
+            mid1Pos = self._findIntermediateCoordinates(posList, startNode, midNode, depth)
+            mid2Pos = self._findIntermediateCoordinates(posList, midNode, endNode, depth)
+            expectedCost = self.euclidean(startPos, mid1Pos) + self.euclidean(mid1Pos, mid2Pos) + self.euclidean(mid2Pos, endPos)
+            gain = originalCost - expectedCost
+            if gain/currentPathLength > self.requiredImprovement:
+                if not self._collisionChecker.lineInCollision(mid1Pos, mid2Pos):
+                    mid1Label = self._generateNodeLabel()
+                    mid2Label = self._generateNodeLabel()
+                    graph.add_node(mid1Label, pos=mid1Pos, color='lightgreen')
+                    graph.add_node(mid2Label, pos=mid2Pos, color='lightgreen')
+                    gu.addWeightedEdge(graph, startNode, mid1Label)
+                    gu.addWeightedEdge(graph, mid1Label, mid2Label)
+                    gu.addWeightedEdge(graph, mid2Label, endNode)
+                    del path[startIndex+1]
+                    path.insert(startIndex+1, mid1Label)
+                    path.insert(startIndex+2, mid2Label)
+                    success = True
+                    break
+            else:
+                break
+            depth += 1
+        return success
+
+
+    def _findIntermediateCoordinates(self, nodePositions, startNode, endNode, depth):
+        return (np.asarray(nodePositions[startNode]) + np.asarray(nodePositions[endNode])) / pow(2, depth)
+
+    def _generateNodeLabel(self):
+        label = f"{self.nodeLabelPrefix}{self.nodeCounter}"
+        self.nodeCounter += 1
+        return label

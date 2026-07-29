@@ -71,8 +71,10 @@ class MultiQueryRoundtripPlanner(PlanerBase):
                 cycle = True
             ))
             tsgCost = gu.pathLength(roadmapWithSTartAndGoals, tsgSolution)
-            solutions["TSG"] = (tsgSolution, tsgCost, roadmapWithSTartAndGoals)
-
+            solutions["BasePath"] = (tsgSolution, tsgCost, roadmapWithSTartAndGoals)
+            usedSolution = tsgSolution
+            usedCost = tsgCost
+            self.graph = roadmapWithSTartAndGoals
 
         except Exception as e:
             self.graph = roadmapWithSTartAndGoals
@@ -85,15 +87,14 @@ class MultiQueryRoundtripPlanner(PlanerBase):
                 }
             )
 
-        if True:
+        if config.get("optimizePath", False):
             shortcutSolution, sortcutGraph = self._pathOptimizer.shortcut_path(roadmapWithSTartAndGoals, tsgSolution)
             shortcutCost = gu.pathLength(sortcutGraph, shortcutSolution)
-            solutions["Shortcut"] = (shortcutSolution, shortcutCost, sortcutGraph)
+            solutions["OptimizedPath"] = (shortcutSolution, shortcutCost, sortcutGraph)
+            usedSolution = shortcutSolution
+            usedCost = shortcutCost
+            self.graph = sortcutGraph
 
-        solution = solutions["Shortcut"]
-        usedSolution = solution[0]
-        usedCost = solution[1]
-        self.graph = solution[2]
         visitOrder = self.trimPathToKnownNodes(usedSolution)
         result = roundtrip_success(
             visit_order=visitOrder,
@@ -102,7 +103,9 @@ class MultiQueryRoundtripPlanner(PlanerBase):
             tour_cost=usedCost,
             pairwise_results={},
             failed_pairs=None,
-            metadata={}
+            metadata={
+                "solutions": solutions,
+            }
         )
         return result
 
@@ -119,7 +122,7 @@ class MultiQueryRoundtripPlanner(PlanerBase):
         optimizations
         1. allow connection between start/goal nodes -> add to KD-tree
         '''
-        graph.add_node(label, pos=node_pos, color='lightgreen')
+        graph.add_node(label, pos=node_pos)
         connectionCandidates = kdTree.query(node_pos, k=15)
         result = False
         for connectionCandidate in connectionCandidates[1]:
@@ -137,12 +140,14 @@ class MultiQueryRoundtripPlanner(PlanerBase):
     def addStartGoalToRoadmap(self, graph, startList, goalList, config):
         posList = nx.get_node_attributes(graph, 'pos')
         kdTree = cKDTree(list(posList.values()))
-        self._addNodeToRoadmap(graph, posList, kdTree, startList[0], "S", config["mConnections"])
+        allowGoalGoalConnection = config.get("allowGoalGoalConnection", False)
+        allowMConnections = config.get("allowMConnections", False)
+        self._addNodeToRoadmap(graph, posList, kdTree, startList[0], "S", allowMConnections)
         for index, goal in enumerate(goalList):
-            if config["directConnections"]:
+            if allowGoalGoalConnection:
                 posList = nx.get_node_attributes(graph, 'pos')
                 kdTree = cKDTree(list(posList.values()))
-            self._addNodeToRoadmap(graph, posList, kdTree, goal, f"G{index}", config["mConnections"])
+            self._addNodeToRoadmap(graph, posList, kdTree, goal, f"G{index}", allowMConnections)
         return graph
 
 

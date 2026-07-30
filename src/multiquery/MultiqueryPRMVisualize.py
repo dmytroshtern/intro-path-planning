@@ -9,6 +9,7 @@ License is based on Creative Commons: Attribution-NonCommercial 4.0 Internationa
 import networkx as nx
 
 def multiqueryPRMVisualize(solution, collisionchecker, ax = None, nodeSize = 300):
+    """Draw a roadmap solution, its obstacles, and the highlighted solution path."""
     graph = solution["graph"]
     path = solution["path"]
 

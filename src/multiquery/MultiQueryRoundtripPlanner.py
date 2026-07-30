@@ -18,9 +18,10 @@ from src.roundtrip_algorithm.result import (
 )
 
 class MultiQueryRoundtripPlanner(PlanerBase):
+    """Plan roundtrip tours by reusing a visibility roadmap across multiple goals."""
 
     def __init__(self, collisionChecker: CollisionChecker):
-        #assert hasattr(roadmapPlannerClass, "createNewRoadmapGraph"), "roadmapPlannerClass must have a method called 'createNewRoadmapGraph'"
+        """Initialize the reusable roadmap, optimizers, and result graph."""
         super().__init__(collisionChecker) # base visibility PRM roadmap to be reused
         self.graph = nx.Graph() # graph to store all paths between start and goal nodes
         self._roadmapPlanner = VisibilityPRMRoadmapper(collisionChecker)
@@ -32,14 +33,15 @@ class MultiQueryRoundtripPlanner(PlanerBase):
     @IPPerfMonitor
     def planPath(self, startList: List[List[Any]], goalList: List[List[Any]], config) -> dict[str, Any]:
         """
-        Plans a roundtrip path that visits the first start and goal nodes.
+        Plan a roundtrip path through the provided start and goal poses.
+
         Args:
-            startList (array): start position in planning space. E.g. [[1,2]]
-            goalList (array) : goal position in planning space. E.g. [[3,4]]
-            config (dict): dictionary with the needed information about the configuration options
+            startList: Start poses in planning space, typically a one-element list like ``[[x, y]]``.
+            goalList: Goal poses in planning space.
+            config: Configuration dictionary controlling roadmap and path optimization.
 
         Returns:
-            List[List[Any]]: A list representing the roundtrip path visiting all goals and returning to the start.
+            A roundtrip result dictionary produced by ``roundtrip_success`` or ``roundtrip_failure``.
         """
         checkedStartList, checkedGoalList = self._checkStartGoal(startList, goalList)
         if len(checkedStartList) == 0 or not checkedStartList[0] == startList[0]:
@@ -102,14 +104,15 @@ class MultiQueryRoundtripPlanner(PlanerBase):
     @IPPerfMonitor
     def planPathBenchmarking(self, startList: List[List[Any]], goalList: List[List[Any]], config) -> dict[str, Any]:
         """
-        Plans a roundtrip path that visits the first start and goal nodes.
+        Run the planner in several configurations and return every intermediate solution.
+
         Args:
-            startList (array): start position in planning space. E.g. [[1,2]]
-            goalList (array) : goal position in planning space. E.g. [[3,4]]
-            config (dict): dictionary with the needed information about the configuration options
+            startList: Start poses in planning space.
+            goalList: Goal poses in planning space.
+            config: Configuration dictionary controlling roadmap and path optimization.
 
         Returns:
-            List[List[Any]]: A list representing the roundtrip path visiting all goals and returning to the start.
+            A dictionary mapping solution names to their path, graph, and cost.
         """
         checkedStartList, checkedGoalList = self._checkStartGoal(startList, goalList)
         if len(checkedStartList) == 0 or not checkedStartList[0] == startList[0]:
@@ -171,6 +174,7 @@ class MultiQueryRoundtripPlanner(PlanerBase):
 
     def generateOptimizedRoadmap(self, baseRoadmap, checkedGoalList: list[Any], checkedStartList: list[Any],
                                  config: dict) -> Any:
+        """Attach start and goal nodes, add random shortcuts, and refine the roadmap if needed."""
         optimizedRoadmapWithStartAndGoals = self._roadmapPlanner.addStartAndGoalsToRoadmap(baseRoadmap.copy(),
                                                                                            checkedStartList,
                                                                                            checkedGoalList, True)
@@ -188,6 +192,7 @@ class MultiQueryRoundtripPlanner(PlanerBase):
 
     @IPPerfMonitor
     def _findTSPSolution(self, usedRoadmapWithGoals):
+        """Solve a TSP over the start node and all goal nodes in the roadmap."""
         goalNodes = [node for node in usedRoadmapWithGoals.nodes if node.startswith("G")]
         return list(nx.algorithms.approximation.traveling_salesman_problem(
             usedRoadmapWithGoals,
@@ -196,6 +201,7 @@ class MultiQueryRoundtripPlanner(PlanerBase):
         ))
 
     def _addSolution(self, solutions, path, graph, name):
+        """Store a named solution together with its cost and associated graph."""
         cost = gu.pathLength(graph, path)
         solutions[name] = {
             "path" : path,
@@ -205,12 +211,15 @@ class MultiQueryRoundtripPlanner(PlanerBase):
 
 
     def trimPathToKnownNodes(self, path) -> list[str]:
+        """Keep only the start and goal labels from a full roadmap path."""
         return [node for node in path if node.startswith("G") or node.startswith("S")]
 
     def _makeUsedPairs(self, visitOrder: list[str]) -> list[tuple[str, str]]:
+        """Convert a visit order into consecutive node pairs."""
         return list(zip(visitOrder, visitOrder[1:]))
 
 
 
     def _isVisible(self, pos, guardPos):
+        """Return ``True`` when the segment between two poses is collision free."""
         return not self._collisionChecker.lineInCollision(pos, guardPos)

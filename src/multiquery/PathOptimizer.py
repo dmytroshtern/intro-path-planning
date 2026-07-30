@@ -8,14 +8,17 @@ from . import GraphUtility as gu
 
 
 class PathOptimizer:
+    """Post-process a roadmap path by adding shortcuts when they are collision free."""
 
     def __init__(self, collisionChecker: CollisionChecker):
+        """Store the collision checker used to validate shortcut candidates."""
         self._collisionChecker = collisionChecker
         self.nodeLabelPrefix = "del"
         self.nodeCounter = 0
         self.requiredImprovement = 0.01
 
     def euclidean(self, a, b):
+        """Compute the Euclidean distance between two coordinate vectors."""
         return np.linalg.norm(np.array(a) - np.array(b))
 
     @IPPerfMonitor
@@ -23,8 +26,12 @@ class PathOptimizer:
         """
         Try to shorten a PRM path.
 
-        G              : networkx graph
-        path           : list of node names
+        Args:
+            originalGraph: Roadmap graph containing the current path.
+            originalPath: Node sequence describing the current solution.
+
+        Returns:
+            A tuple of ``(optimized_path, optimized_graph)``.
         """
         graph = originalGraph.copy()
         path = originalPath.copy()
@@ -64,6 +71,7 @@ class PathOptimizer:
         return path, graph
 
     def _rankPotentialShortcuts(self, graph: nx.Graph, optimizedPairs: list[Any], path, posList):
+        """Rank candidate three-node segments by the expected shortcut gain."""
         candidates = []
         currentPathLength = gu.pathLength(graph, path)
         for i in range(len(path) - 2):
@@ -92,6 +100,7 @@ class PathOptimizer:
         return candidates
 
     def _delTreeAlgorithm(self, graph, posList, path, startIndex):
+        """Try to replace a segment with two intermediate nodes when direct shortcutting fails."""
         success = False
         depth = 1
         startNode = path[startIndex]
@@ -132,12 +141,14 @@ class PathOptimizer:
 
 
     def _findIntermediateCoordinates(self, nodePositions, startNode, goalNode, depth):
+        """Return a point halfway between ``goalNode`` and ``startNode`` at the given refinement depth."""
         start = np.asarray(nodePositions[startNode])
         goal = np.asarray(nodePositions[goalNode])
         goalToStart = -goal + start
         return goal + goalToStart/pow(2, depth)
 
     def _generateNodeLabel(self):
+        """Generate a unique label for intermediate shortcut nodes."""
         label = f"{self.nodeLabelPrefix}{self.nodeCounter}"
         self.nodeCounter += 1
         return label

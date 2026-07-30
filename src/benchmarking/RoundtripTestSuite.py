@@ -19,7 +19,19 @@ benchList.append(
         "Trap",
         CollisionChecker(trap_field),
         [[10, 15]],
-        [[10, 1]],
+        [[10.0, 1.0], [2.0, 20.0], [20.0, 20.0], [2.0, 2.0],
+            [20.0, 2.0], [10.0, 20.0], [2.0, 10.0], [20.0, 10.0]],
+        "Following the direct connection from goal to start leads into a trap.",
+        2,
+    )
+)
+
+benchList.append(
+    Benchmark(
+        "Trap one goal",
+        CollisionChecker(trap_field),
+        [[10, 15]],
+        [[10.0, 1.0]],
         "Following the direct connection from goal to start leads into a trap.",
         2,
     )
@@ -35,7 +47,8 @@ benchList.append(
         "Bottleneck",
         CollisionChecker(bottleneck_field),
         [[4, 15]],
-        [[18, 1]],
+        [[18.0, 1.0], [4.0, 3.0], [18.0, 20.0], [8.0, 18.0],
+            [3.0, 20.0], [20.0, 16.0], [8.0, 5.0], [15.0, 5.0]],
         "The planner has to find a narrow passage.",
         2,
     )
@@ -51,7 +64,19 @@ benchList.append(
         "Fat bottleneck",
         CollisionChecker(fat_bottleneck_field),
         [[4, 21]],
-        [[18, 1]],
+        [[18.0, 1.0], [4.0, 3.0], [18.0, 20.0], [12.0, 4.0],
+            [2.0, 20.0], [20.0, 3.0], [12.0, 18.0], [12.0, 11.0]],
+        "The planner has to find a narrow passage with significant extent.",
+        2,
+    )
+)
+
+benchList.append(
+    Benchmark(
+        "Fat bottleneck one goal",
+        CollisionChecker(fat_bottleneck_field),
+        [[4, 21]],
+        [[18.0, 1.0]],
         "The planner has to find a narrow passage with significant extent.",
         2,
     )

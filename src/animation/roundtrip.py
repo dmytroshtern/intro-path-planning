@@ -61,6 +61,14 @@ def _draw_start_and_goals(benchmark, ax):
         label="Start",
         zorder=10,
     )
+    ax.annotate(
+        "S",
+        start,
+        xytext=(6, 6),
+        textcoords="offset points",
+        color="#2ca02c",
+        fontweight="bold",
+    )
     ax.scatter(
         goals[:, 0],
         goals[:, 1],
@@ -70,6 +78,55 @@ def _draw_start_and_goals(benchmark, ax):
         edgecolor="black",
         label="Goals",
         zorder=10,
+    )
+    for index, goal in enumerate(goals, start=1):
+        ax.annotate(
+            f"G{index}",
+            goal,
+            xytext=(6, 6),
+            textcoords="offset points",
+            color="#d62728",
+            fontweight="bold",
+        )
+
+
+def _configuration_collision_map(environment, samples=80):
+    """Sample the 2-DoF collision regions as shown in the lecture."""
+    limits = np.asarray(environment.getEnvironmentLimits(), dtype=float)
+    q1_values = np.linspace(*limits[0], samples)
+    q2_values = np.linspace(*limits[1], samples)
+    collision_map = np.zeros((samples, samples), dtype=bool)
+    original_configuration = [
+        joint.theta for joint in environment.kin_chain.joints
+    ]
+
+    for row, q2 in enumerate(q2_values):
+        for column, q1 in enumerate(q1_values):
+            collision_map[row, column] = environment.pointInCollision(
+                [q1, q2]
+            )
+
+    environment.kin_chain.move(original_configuration)
+    return q1_values, q2_values, collision_map
+
+
+def _draw_configuration_obstacles(ax, collision_data):
+    q1_values, q2_values, collision_map = collision_data
+    ax.contourf(
+        q1_values,
+        q2_values,
+        collision_map,
+        levels=[0.5, 1.5],
+        colors=["#ff9999"],
+        alpha=0.45,
+    )
+    ax.plot(
+        [],
+        [],
+        color="#ff9999",
+        linewidth=8,
+        alpha=0.45,
+        label="Collision region",
     )
 
 
@@ -130,59 +187,34 @@ def _workspace_references(robot, benchmark):
     return poses
 
 
-def _draw_workspace_targets(ax, poses):
-    """Mark 2-DoF start and goal positions in the workspace."""
+def _draw_workspace_references(ax, poses, show_robot_poses):
+    """Draw start and goals in the workspace."""
     for index, (label, points) in enumerate(poses):
         is_start = label == "S"
         color = "#2ca02c" if is_start else "#d62728"
+        if show_robot_poses:
+            ax.plot(
+                points[:, 0],
+                points[:, 1],
+                color=color,
+                linestyle="--",
+                linewidth=1.5,
+                alpha=0.3,
+            )
+        end_effector = points[-1]
         ax.scatter(
-            *points[-1],
+            *end_effector,
             color=color,
             marker="*" if is_start else "X",
             edgecolor="black",
             s=120 if is_start else 75,
+            alpha=0.9,
             zorder=8,
             label=(
                 "Start"
                 if is_start
                 else "Goals" if index == 1 else None
             ),
-        )
-        ax.annotate(
-            label,
-            points[-1],
-            xytext=(6, 6),
-            textcoords="offset points",
-            color=color,
-            fontweight="bold",
-        )
-
-
-def _draw_workspace_references(ax, poses):
-    """Show required 4- or 6-DoF robot poses in the workspace."""
-    for index, (label, points) in enumerate(poses):
-        is_start = label == "S"
-        color = "#2ca02c" if is_start else "#d62728"
-        ax.plot(
-            points[:, 0],
-            points[:, 1],
-            color=color,
-            linestyle="--",
-            linewidth=1.5,
-            alpha=0.3,
-            label=(
-                "Start configuration"
-                if is_start
-                else "Goal configurations" if index == 1 else None
-            ),
-        )
-        end_effector = points[-1]
-        ax.scatter(
-            *end_effector,
-            color=color,
-            s=45,
-            alpha=0.65,
-            zorder=8,
         )
         ax.annotate(
             label,
@@ -200,6 +232,7 @@ def _animation_html(figure, update, number_of_frames, interval):
         frames=number_of_frames,
         interval=interval,
     )
+    animation.save("animation.gif", writer="pillow", fps=15)
     html = HTML(animation.to_jshtml())
     plt.close(figure)
     return html
@@ -265,6 +298,7 @@ def animate_planar_roundtrip(
     workspace_poses = _workspace_references(robot, benchmark)
     if dof == 2:
         configuration_limits = environment.getEnvironmentLimits()
+        collision_data = _configuration_collision_map(environment)
         figure, (workspace_ax, configuration_ax) = plt.subplots(
             1, 2, figsize=(14, 7)
         )
@@ -280,10 +314,11 @@ def animate_planar_roundtrip(
 
         workspace_ax.clear()
         environment.drawObstacles(workspace_ax, inWorkspace=True)
-        if dof == 2:
-            _draw_workspace_targets(workspace_ax, workspace_poses)
-        else:
-            _draw_workspace_references(workspace_ax, workspace_poses)
+        _draw_workspace_references(
+            workspace_ax,
+            workspace_poses,
+            show_robot_poses=dof > 2,
+        )
         planarRobotVisualize(robot, workspace_ax)
         workspace_ax.plot(
             [],
@@ -300,6 +335,10 @@ def animate_planar_roundtrip(
 
         if configuration_ax is not None:
             configuration_ax.clear()
+            _draw_configuration_obstacles(
+                configuration_ax,
+                collision_data,
+            )
             _draw_path_progress(
                 configuration_ax,
                 path,

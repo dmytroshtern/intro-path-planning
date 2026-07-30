@@ -8,11 +8,17 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from notebooks.IPEnvironmentKin import KinChainCollisionChecker
-
+from src.multiquery.MultiQueryRoundtripPlanner import (
+    MultiQueryRoundtripPlanner,
+)
+from src.multiquery.VisibilityPRMRoadmapper import VisibilityPRMRoadmapper
 from src.roundtrip_algorithm import RoundtripPlanner
 
-from .config import PLANAR_EXPERIMENT_SEED, build_roundtrip_config
+from .config import (
+    MULTIQUERY_PLANNER_NAME,
+    PLANAR_EXPERIMENT_SEED,
+    build_roundtrip_config,
+)
 
 
 _COLLISION_METHODS = (
@@ -53,7 +59,7 @@ def _count_collision_calls(checker):
 
 def _extract_metrics(
     result, benchmark, planner_name, order_method, seed,
-    planning_time, experiment_id, collision_counts, error,
+    planning_time, experiment_id, collision_counts, error, planner_graph,
 ):
     """Convert one planner result to the report's metric schema."""
     result = result if isinstance(result, dict) else {}
@@ -65,6 +71,7 @@ def _extract_metrics(
         if not value.get("metadata", {}).get("reversed", False)
     ]
     successful = sum(bool(value.get("success")) for value in pairwise_results)
+    failed = len(pairwise_results) - successful
     metadata = [value.get("metadata", {}) for value in pairwise_results]
     roadmap_nodes = sum(
         value.get("roadmap_nodes") or 0 for value in metadata
@@ -72,22 +79,19 @@ def _extract_metrics(
     roadmap_edges = sum(
         value.get("roadmap_edges") or 0 for value in metadata
     )
-    point_checks = collision_counts["pointInCollision"]
-    line_checks = collision_counts["lineInCollision"]
-    exact_checks = collision_counts["lineInCollisionExact"]
+    if planner_name == MULTIQUERY_PLANNER_NAME:
+        successful = len(result.get("used_pairs") or []) if success else 0
+        failed = 0
+        if planner_graph is not None:
+            roadmap_nodes = planner_graph.number_of_nodes()
+            roadmap_edges = planner_graph.number_of_edges()
     tour_cost = result.get("tour_cost")
 
     return {
         "experiment_id": experiment_id,
         "benchmark": benchmark.name,
-        "robot_type": (
-            "PlanarManipulator"
-            if isinstance(benchmark.collisionChecker, KinChainCollisionChecker)
-            else "PointRobot"
-        ),
         "dof": benchmark.collisionChecker.getDim(),
         "number_of_goals": len(benchmark.goalList),
-        "difficulty": benchmark.level,
         "base_planner": planner_name,
         "order_method": order_method,
         "seed": seed,
@@ -98,13 +102,10 @@ def _extract_metrics(
         else np.nan,
         "final_path_points": len(path) if success else 0,
         "successful_subpaths": successful,
-        "failed_subpaths": len(pairwise_results) - successful,
+        "failed_subpaths": failed,
         "roadmap_nodes": int(roadmap_nodes),
         "roadmap_edges": int(roadmap_edges),
-        "point_collision_checks": point_checks,
-        "line_collision_checks": line_checks,
-        "exact_line_collision_checks": exact_checks,
-        "collision_checks": point_checks + line_checks + exact_checks,
+        "collision_checks": sum(collision_counts.values()),
         "error": error or result.get("reason", ""),
     }
 
@@ -132,7 +133,13 @@ class RoundtripBenchmarkRunner:
         )
         random.seed(seed)
         np.random.seed(seed)
-        planner = RoundtripPlanner(benchmark.collisionChecker)
+        if base_planner_name == MULTIQUERY_PLANNER_NAME:
+            planner = MultiQueryRoundtripPlanner(
+                VisibilityPRMRoadmapper(benchmark.collisionChecker),
+                benchmark.collisionChecker,
+            )
+        else:
+            planner = RoundtripPlanner(benchmark.collisionChecker)
         config = build_roundtrip_config(
             base_planner_name, order_method, seed, benchmark
         )
@@ -163,6 +170,7 @@ class RoundtripBenchmarkRunner:
             experiment_id,
             collision_counts,
             error,
+            getattr(planner, "graph", None),
         )
         record = SimpleNamespace(
             result=result, benchmark=benchmark, metrics=metrics

@@ -3,19 +3,18 @@
 """Benchmark suites used for roundtrip evaluation and comparison."""
 
 import numpy as np
-from shapely.geometry import LineString
+from shapely.geometry import LineString, Point
 
 from notebooks.IPBenchmark import Benchmark
 from notebooks.IPEnvironment import CollisionChecker
 from notebooks.IPEnvironmentKin import KinChainCollisionChecker
 from notebooks.IPPlanarManipulator import PlanarRobot
-
-from . import RoundtripTestSuite
+from notebooks import IPTestSuite
 
 
 _LECTURE_BENCHMARKS = {
     benchmark.name: benchmark
-    for benchmark in RoundtripTestSuite.benchList
+    for benchmark in IPTestSuite.benchList
 }
 
 
@@ -90,16 +89,6 @@ _POINT_ROBOT_SPECS = (
             (2.0, 20.0), (20.0, 3.0), (12.0, 18.0), (12.0, 11.0),
         ),
     ),
-    (
-        "Alternating Gates",
-        "Alternating Gates Roundtrip",
-        "Zig-zag roundtrip through alternating gates.",
-        3,
-        (
-            (8.0, 12.0), (13.0, 2.0), (18.0, 12.0), (23.0, 2.0),
-            (28.0, 12.0), (4.0, 12.0), (8.0, 2.0), (28.0, 2.0),
-        ),
-    ),
 )
 
 
@@ -115,7 +104,7 @@ def create_point_robot_benchmarks(
     goal_counts=(3, 5, 8),
     label_goal_count=False,
 ):
-    """Create goal-count variants for four 2-DoF point environments."""
+    """Create goal-count variants for three lecture environments."""
     goal_counts = tuple(goal_counts)
     if not goal_counts or any(
         not isinstance(goal_count, int) or goal_count < 1
@@ -151,87 +140,84 @@ def create_point_robot_benchmarks(
     return benchmarks
 
 
-_PLANAR_SCENE = {
+# The 2- and 4-DoF cases use the obstacle scene from
+# IP-10-1-PlanarManipulatorTests.ipynb.
+_PLANAR_LECTURE_SCENE = {
     "obs1": LineString([(-2.0, 0.0), (-0.8, 0.0)]).buffer(0.5),
     "obs2": LineString([(2.0, 0.0), (2.0, 1.0)]).buffer(0.2),
     "obs3": LineString([(-1.0, 2.0), (1.0, 2.0)]).buffer(0.1),
 }
 
-
-_SIX_DOF_SCENE = {
-    "wall": LineString([(3.0, 1.0), (3.0, 4.0)]).buffer(0.3),
+_PLANAR_6_DOF_SCENE = {
+    "obs1": LineString([(-2.1, 0.5), (-1.0, 0.5)]).buffer(0.3),
+    "obs2": LineString([(1.45, -1.0), (1.45, 0.45)]).buffer(0.18),
+    "obs3": LineString([(-0.5, 1.55), (0.9, 1.55)]).buffer(0.12),
+    "obs4": Point(-0.4, -1.7).buffer(0.28),
 }
 
+_PLANAR_TOTAL_REACH = 3.0
 
-_PLANAR_EVALUATION_CASES = (
+_PLANAR_CASES = (
     (
-        "PlanarRobot 2-DoF Easy",
-        {"obs2": _PLANAR_SCENE["obs2"]},
+        "PlanarRobot 2-DoF",
+        _PLANAR_LECTURE_SCENE,
+        "Lecture scene with two revolute joints.",
         1,
-        0.15,
         (
             (
-                [2.787, -0.883],
-                [[1.789, 0.574], [-1.292, 2.656], [-0.182, -2.948]],
+                [-1.0070, 1.3436],
+                [
+                    [-2.1370, -1.3293],
+                    [1.6117, 1.4337],
+                    [0.1460, 1.5000],
+                ],
             ),
             (
-                [-0.689, -0.913],
-                [[0.955, -0.961], [-2.795, -1.568], [2.142, 1.999]],
-            ),
-            (
-                [-1.602, 0.424],
-                [[0.112, 2.525], [-0.050, -1.703], [-2.556, -2.568]],
-            ),
-        ),
-    ),
-    (
-        "PlanarRobot 2-DoF Hard",
-        _PLANAR_SCENE,
-        3,
-        0.15,
-        (
-            (
-                [-0.966, -0.354],
-                [[1.984, 1.178], [0.399, 2.116], [-1.807, 2.604]],
-            ),
-            (
-                [-1.160, 1.748],
-                [[0.155, -0.949], [-2.184, -0.330], [-2.388, 1.266]],
-            ),
-            (
-                [-2.058, -1.590],
-                [[-0.420, 0.879], [0.780, -1.854], [-0.658, -2.171]],
+                [-0.9021, 0.7824],
+                [
+                    [-2.3642, 0.2711],
+                    [-0.5763, -1.1818],
+                    [-1.3589, -1.9088],
+                ],
             ),
         ),
     ),
     (
         "PlanarRobot 4-DoF",
-        {"obs1": _PLANAR_SCENE["obs1"]},
+        _PLANAR_LECTURE_SCENE,
+        "Lecture scene with four shorter revolute links.",
         2,
-        0.35,
         (
             (
-                [-1.794, -0.523, 1.933, -1.420],
+                [1.2378, -0.5271, -0.4028, -0.5284],
                 [
-                    [1.984, -2.465, -0.400, 2.129],
-                    [-1.580, -1.481, 2.806, -1.826],
-                    [-2.314, -0.078, -2.192, 0.820],
+                    [1.8257, 1.0506, -0.3531, 0.7669],
+                    [-2.1758, -0.4898, -0.1678, 0.7032],
+                    [-0.8508, 0.1818, -0.3736, 0.8682],
                 ],
             ),
             (
-                [1.129, -0.798, 1.348, 1.889],
+                [-1.0297, 1.6727, -0.7160, -0.2014],
                 [
-                    [0.448, -2.989, 1.556, -1.035],
-                    [2.125, -0.252, -1.573, 0.427],
-                    [1.763, 0.016, -0.306, -0.868],
+                    [2.1947, 0.0288, 0.8377, -0.1840],
+                    [-2.1520, 0.5139, -1.0269, 0.8479],
+                    [1.0536, -0.2315, 0.1746, 0.4703],
                 ],
             ),
+        ),
+    ),
+    (
+        "PlanarRobot 6-DoF",
+        _PLANAR_6_DOF_SCENE,
+        "Additional obstacle and six short revolute links.",
+        3,
+        (
             (
-                [-1.651, -1.098, -0.313, -2.524],
+                [0.6429, -0.1990, 0.2695, -0.9584, 0.2881, 0.7331],
                 [
-                    [-0.616, 0.193, -1.713, -0.632],
-                    [0.073, 1.994, 1.353, -0.193],
-                    [-1.210, -0.754, -2.087, 2.937],
+                    [0.4239, 0.0871, 0.5798, 0.1917, 0.5075, 0.6344],
+                    [0.1394, 0.8415, 0.2582, -0.2990, -0.0409, 0.5457],
+                    [0.3880, -0.2837, 0.9352, -0.3274, -0.0573, -0.0366],
                 ],
             ),
         ),
@@ -244,14 +230,22 @@ def _create_planar_benchmark(
     scene,
     start_configuration,
     goal_configurations,
-    level,
     description,
-    fk_resolution=0.15,
+    level,
 ):
-    """Create one PlanarManipulator benchmark from fixed configurations."""
+    """Create one equally sized PlanarManipulator benchmark."""
     degrees_of_freedom = len(start_configuration)
     robot = PlanarRobot(n_joints=degrees_of_freedom)
+    link_length = _PLANAR_TOTAL_REACH / degrees_of_freedom
+    for joint in robot.joints:
+        joint.a = link_length
+
     limits = [[-np.pi, np.pi] for _ in range(degrees_of_freedom)]
+    fk_resolution = {
+        2: 0.2,
+        4: 0.35,
+        6: 0.5,
+    }[degrees_of_freedom]
     environment = SelfCollisionKinChainChecker(
         robot,
         scene=dict(scene),
@@ -264,47 +258,25 @@ def _create_planar_benchmark(
         environment,
         [list(start_configuration)],
         [list(configuration) for configuration in goal_configurations],
-        description,
+        f"{description} Total reach: {_PLANAR_TOTAL_REACH:.1f}.",
         level,
     )
 
 
 def create_planar_robot_benchmarks():
-    """Create three configuration sets per evaluation case plus 6 DoF."""
-    benchmarks = []
-    for name, scene, level, resolution, variants in _PLANAR_EVALUATION_CASES:
-        for index, (start, goals) in enumerate(variants, start=1):
-            benchmarks.append(
-                _create_planar_benchmark(
-                    f"{name} (configuration {index})",
-                    scene,
-                    start,
-                    goals,
-                    level,
-                    (
-                        f"{name} with configuration set {index}: "
-                        "one start and three goal configurations."
-                    ),
-                    fk_resolution=resolution,
-                )
-            )
-
-    benchmarks.append(
+    """Create the selected PlanarManipulator configuration variants."""
+    return [
         _create_planar_benchmark(
-            "PlanarRobot 6-DoF",
-            _SIX_DOF_SCENE,
-            [1.458, 2.515, 1.566, 2.412, -1.712, 1.477],
-            [
-                [0.935, -1.364, -1.364, 2.135, -1.785, -0.732],
-                [-0.529, -1.210, -0.915, 1.531, -1.066, 0.296],
-                [-2.371, -0.468, 1.693, 2.109, -0.955, -1.534],
-            ],
-            3,
-            "Optional six-joint robot with one workspace obstacle.",
-            fk_resolution=0.5,
+            f"{name} (configuration {variant_index})",
+            scene,
+            start,
+            goals,
+            f"{description} Configuration variant {variant_index}.",
+            level,
         )
-    )
-    return benchmarks
+        for name, scene, description, level, variants in _PLANAR_CASES
+        for variant_index, (start, goals) in enumerate(variants, start=1)
+    ]
 
 
 def validate_benchmark(benchmark):
@@ -329,19 +301,29 @@ def benchmark_overview(benchmarks):
     """Return simple benchmark metadata for a notebook table."""
     rows = []
     for benchmark in benchmarks:
-        robot_type = (
-            "PlanarManipulator"
-            if isinstance(benchmark.collisionChecker, KinChainCollisionChecker)
-            else "PointRobot"
+        is_planar = isinstance(
+            benchmark.collisionChecker,
+            KinChainCollisionChecker,
         )
-        rows.append(
-            {
-                "benchmark": benchmark.name,
-                "robot_type": robot_type,
-                "dof": benchmark.collisionChecker.getDim(),
-                "goals": len(benchmark.goalList),
-                "difficulty": benchmark.level,
-                "description": benchmark.description,
-            }
+        display_name = benchmark.name
+        if display_name.endswith(" goals)"):
+            display_name = display_name.rsplit(" (", 1)[0]
+
+        row = {
+            "benchmark": display_name,
+            "robot_type": (
+                "PlanarManipulator" if is_planar else "PointRobot"
+            ),
+            "goals": len(benchmark.goalList),
+        }
+        if not is_planar:
+            row["difficulty"] = benchmark.level
+        description = benchmark.description
+        goal_suffix = (
+            f" Number of goals: {len(benchmark.goalList)}."
         )
+        if description.endswith(goal_suffix):
+            description = description.removesuffix(goal_suffix)
+        row["description"] = description
+        rows.append(row)
     return rows

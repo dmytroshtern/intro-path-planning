@@ -33,6 +33,15 @@ _PLANNER_CONFIGS = {
     },
 }
 
+MULTIQUERY_PLANNER_NAME = "MultiQueryPRM"
+_MULTIQUERY_CONFIG = {
+    "ntry": 40,
+    "benchmark": False,
+    "optimizeRoadmap": True,
+    "optimizePath": True,
+}
+
+
 def _planar_configs(radius):
     """Return the final planner settings for a planar configuration space."""
     return {
@@ -45,8 +54,8 @@ def _planar_configs(radius):
         "LazyPRM": {
             "initialRoadmapSize": 40,
             "updateRoadmapSize": 20,
-            "kNearest": 5,
-            "maxIterations": 40,
+            "kNearest": 15,
+            "maxIterations": 10,
         },
         "VisibilityPRM": {
             "ntry": 40,
@@ -60,7 +69,7 @@ _SIX_DOF_CONFIGS = _planar_configs(radius=16.0)
 
 BASE_PLANNERS_TO_COMPARE = tuple(_PLANNER_CLASSES)
 ORDER_METHODS_TO_COMPARE = ("exact", "greedy")
-POINT_EXPERIMENT_SEEDS = (17, 31) #47) #, 73, 101)
+POINT_EXPERIMENT_SEEDS = (17, 31, 47, 73, 101)
 PLANAR_EXPERIMENT_SEED = 17
 
 
@@ -71,6 +80,8 @@ def build_roundtrip_config(
     benchmark,
 ):
     """Build a configuration accepted by RoundtripPlanner."""
+    if base_planner_name == MULTIQUERY_PLANNER_NAME:
+        return deepcopy(_MULTIQUERY_CONFIG)
     if base_planner_name not in _PLANNER_CLASSES:
         raise KeyError(f"Unknown base planner: {base_planner_name}")
     if order_method not in ORDER_METHODS_TO_COMPARE:

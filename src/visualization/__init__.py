@@ -1,3 +1,3 @@
 """Roundtrip visualization package."""
 
-from .roundtrip import plot_metagraph, plot_roundtrip_components
+from .roundtrip import plot_roundtrip_components

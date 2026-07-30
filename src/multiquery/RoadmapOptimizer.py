@@ -1,6 +1,5 @@
 from timeit import repeat
 
-from multiquery import VisibilityStatsHandler
 from IPPerfMonitor import IPPerfMonitor
 from notebooks.IPEnvironment import CollisionChecker
 import networkx as nx
@@ -8,7 +7,7 @@ import random
 from typing import Any
 import numpy as np
 from math import dist
-import multiquery.GraphUtility as gu
+from . import GraphUtility as gu
 
 class RoadmapOptimizer:
 

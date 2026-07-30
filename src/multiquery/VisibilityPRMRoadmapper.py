@@ -8,14 +8,10 @@ License is based on Creative Commons: Attribution-NonCommercial 4.0 Internationa
 
 from IPPRMBase import PRMBase
 import networkx as nx
-import multiquery.GraphUtility as gu
-from scipy.spatial import cKDTree
+from . import GraphUtility as gu
 from IPPerfMonitor import IPPerfMonitor
-import numpy as np
-from IPVisibilityPRM import VisPRM
-from math import dist
 
-from multiquery import VisibilityStatsHandler
+from .VisibilityStatsHandler import VisibilityStatsHandler
 
 
 class VisibilityPRMRoadmapper(PRMBase):

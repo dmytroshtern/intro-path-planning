@@ -12,11 +12,11 @@ from IPPRMBase import PRMBase
 from IPPerfMonitor import IPPerfMonitor
 from IPEnvironment import CollisionChecker
 
-import multiquery.GraphUtility as gu
-from multiquery.PathOptimizer import PathOptimizer
-from multiquery.RoadmapOptimizer import RoadmapOptimizer
-from multiquery.VisibilityPRMRoadmapper import VisibilityPRMRoadmapper
-from multiquery.VisibilityStatsHandler import VisibilityStatsHandler
+from . import GraphUtility as gu
+from .PathOptimizer import PathOptimizer
+from .RoadmapOptimizer import RoadmapOptimizer
+from .VisibilityPRMRoadmapper import VisibilityPRMRoadmapper
+from .VisibilityStatsHandler import VisibilityStatsHandler
 from notebooks.IPPlanerBase import PlanerBase
 from src.roundtrip_algorithm.result import (
     roundtrip_failure,

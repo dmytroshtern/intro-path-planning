@@ -1,5 +1,6 @@
 """Plots for the PointRobot and PlanarManipulator evaluations."""
 
+from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.patches import Patch
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,6 +9,7 @@ import pandas as pd
 
 _PLANNERS = ("BasicPRM", "VisibilityPRM", "LazyPRM")
 _PLANNER_LABELS = _PLANNERS
+_COMPARISON_PLANNERS = _PLANNERS + ("MultiQueryPRM",)
 _ORDER_METHODS = ("exact", "greedy")
 
 _BLUE = "#0000ff"
@@ -15,7 +17,10 @@ _YELLOW = "#d6cf00"
 _PURPLE = "#800080"
 _GREEN = "#2ca02c"
 _RED = "#d62728"
-_METHOD_HATCHES = {"exact": "", "greedy": "//"}
+_POINT_HEATMAP_COLORS = LinearSegmentedColormap.from_list(
+    "point_evaluation_red_green",
+    plt.colormaps["RdYlGn"](np.linspace(0.15, 0.85, 256)),
+)
 
 
 def _normalize_order_methods(order_methods):
@@ -69,20 +74,6 @@ def _style_right_axis(axis, label, color, offset=None):
     axis.spines["right"].set_color(color)
 
 
-def _method_handles(order_methods):
-    if len(order_methods) == 1:
-        return []
-    return [
-        Patch(
-            facecolor="white",
-            edgecolor="black",
-            hatch=_METHOD_HATCHES[method],
-            label=method.capitalize(),
-        )
-        for method in order_methods
-    ]
-
-
 def _metric_handles(metrics):
     return [
         Patch(facecolor=color, edgecolor="black", label=label)
@@ -91,7 +82,7 @@ def _metric_handles(metrics):
 
 
 def _set_planner_axis(axis, positions):
-    axis.set_xticks(positions, _PLANNER_LABELS)
+    axis.set_xticks(positions, _COMPARISON_PLANNERS)
     axis.set_xlabel("Base planner")
 
 
@@ -118,12 +109,74 @@ def _add_segment_labels(axis, bars):
     )
 
 
+def _heatmap(
+    axis,
+    values,
+    row_labels,
+    column_labels,
+    *,
+    title,
+    color_map,
+    colorbar_label,
+    value_format,
+    row_block,
+    column_block,
+    limits=None,
+):
+    """Draw one annotated evaluation matrix."""
+    cmap = (
+        plt.colormaps[color_map].copy()
+        if isinstance(color_map, str)
+        else color_map.copy()
+    )
+    cmap.set_bad("#d9d9d9")
+    vmin, vmax = limits or (None, None)
+    image = axis.imshow(
+        np.ma.masked_invalid(values),
+        cmap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+        aspect="auto",
+    )
+    axis.set_xticks(np.arange(len(column_labels)), column_labels)
+    axis.set_yticks(np.arange(len(row_labels)), row_labels)
+    axis.set_title(title)
+
+    for separator in range(row_block, len(row_labels), row_block):
+        axis.axhline(separator - 0.5, color="white", linewidth=2)
+    for separator in range(column_block, len(column_labels), column_block):
+        axis.axvline(separator - 0.5, color="white", linewidth=2)
+
+    for row, column in np.ndindex(values.shape):
+        value = values[row, column]
+        text = value_format.format(value) if np.isfinite(value) else "n/a"
+        axis.text(
+            column,
+            row,
+            text,
+            ha="center",
+            va="center",
+            fontsize=9,
+            fontweight="semibold",
+            color="black",
+        )
+
+    colorbar = axis.figure.colorbar(
+        image,
+        ax=axis,
+        fraction=0.025,
+        pad=0.02,
+    )
+    colorbar.set_label(colorbar_label)
+    return colorbar
+
+
 def plot_point_robot_evaluation(
     dataframe,
     benchmark_groups,
     order_methods=_ORDER_METHODS,
 ):
-    """Show all PointRobot combinations in two compact matrices."""
+    """Show success, path length, and planning time in compact matrices."""
     order_methods = _normalize_order_methods(order_methods)
     groups = list(benchmark_groups.items())
     if not groups:
@@ -176,6 +229,7 @@ def plot_point_robot_evaluation(
 
     success_matrix = np.full((len(rows), len(columns)), np.nan)
     length_matrix = np.full((len(rows), len(columns)), np.nan)
+    time_matrix = np.full((len(rows), len(columns)), np.nan)
     for row_index, (benchmark_name, _) in enumerate(rows):
         for column_index, (planner, method) in enumerate(columns):
             result = selected[
@@ -192,105 +246,51 @@ def plot_point_robot_evaluation(
                 result["success"],
                 "final_path_length",
             ].mean()
+            time_matrix[row_index, column_index] = (
+                result["planning_time"].mean()
+            )
 
-    figure, axes = plt.subplots(2, 1, figsize=(12, 11))
-    success_image = axes[0].imshow(
-        success_matrix,
-        cmap="RdYlGn",
-        vmin=0,
-        vmax=100,
-        aspect="auto",
-    )
-    length_colormap = plt.colormaps["viridis"].copy()
-    length_colormap.set_bad("#d9d9d9")
-    length_image = axes[1].imshow(
-        np.ma.masked_invalid(length_matrix),
-        cmap=length_colormap,
-        aspect="auto",
-    )
-
+    figure, axes = plt.subplots(3, 1, figsize=(12, 16))
     row_labels = [label for _, label in rows]
-    for axis, title in zip(
-        axes,
-        (
-            "Roundtrip success rate",
-            "Mean final roundtrip length (successful runs)",
-        ),
-    ):
-        axis.set_xticks(
-            np.arange(len(column_labels)),
-            column_labels,
-        )
-        axis.set_yticks(
-            np.arange(len(row_labels)),
-            row_labels,
-        )
-        axis.set_title(title)
-        for separator in range(len(groups), len(rows), len(groups)):
-            axis.axhline(
-                separator - 0.5,
-                color="white",
-                linewidth=2,
-            )
-        for separator in range(2, len(column_labels), 2):
-            axis.axvline(
-                separator - 0.5,
-                color="white",
-                linewidth=2,
-            )
-
-    for row_index in range(success_matrix.shape[0]):
-        for column_index in range(success_matrix.shape[1]):
-            success_rate = success_matrix[row_index, column_index]
-            axes[0].text(
-                column_index,
-                row_index,
-                f"{success_rate:.0f}%"
-                if np.isfinite(success_rate)
-                else "n/a",
-                ha="center",
-                va="center",
-                fontsize=8,
-                color="black",
-            )
-            path_length = length_matrix[row_index, column_index]
-            axes[1].text(
-                column_index,
-                row_index,
-                f"{path_length:.1f}"
-                if np.isfinite(path_length)
-                else "n/a",
-                ha="center",
-                va="center",
-                fontsize=8,
-                color=(
-                    "black"
-                    if np.isfinite(path_length)
-                    and length_image.norm(path_length) > 0.60
-                    else "white"
-                    if np.isfinite(path_length)
-                    else "black"
-                ),
-            )
-
-    success_colorbar = figure.colorbar(
-        success_image,
-        ax=axes[0],
-        fraction=0.025,
-        pad=0.02,
+    common = {
+        "row_labels": row_labels,
+        "column_labels": column_labels,
+        "row_block": len(groups),
+        "column_block": len(method_order),
+    }
+    success_colorbar = _heatmap(
+        axes[0],
+        success_matrix,
+        title="Roundtrip success rate",
+        color_map=_POINT_HEATMAP_COLORS,
+        colorbar_label="Success rate",
+        value_format="{:.0f}%",
+        limits=(0, 100),
+        **common,
     )
     success_colorbar.set_ticks(
         [0, 20, 40, 60, 80, 100],
         labels=["0%", "20%", "40%", "60%", "80%", "100%"],
     )
-    success_colorbar.set_label("Success rate")
-    length_colorbar = figure.colorbar(
-        length_image,
-        ax=axes[1],
-        fraction=0.025,
-        pad=0.02,
+    _heatmap(
+        axes[1],
+        length_matrix,
+        title="Mean final roundtrip length (successful runs)",
+        color_map=_POINT_HEATMAP_COLORS.reversed(),
+        colorbar_label="Path length",
+        value_format="{:.1f}",
+        **common,
     )
-    length_colorbar.set_label("Path length")
+    _heatmap(
+        axes[2],
+        time_matrix,
+        title="Mean total planning time",
+        color_map=_POINT_HEATMAP_COLORS.reversed(),
+        colorbar_label="Planning time [s]",
+        value_format="{:.2f} s",
+        **common,
+    )
+
     seed_count = selected["seed"].nunique()
     figure.suptitle(
         "PointRobot evaluation: "
@@ -306,7 +306,7 @@ def plot_planar_robot_evaluation(
     planner_name,
     order_method,
 ):
-    """Compare PlanarManipulator cases across three configuration sets."""
+    """Compare the selected PlanarManipulator benchmark cases."""
     benchmark_names = [
         name
         for group_names in benchmark_groups.values()
@@ -334,23 +334,25 @@ def plot_planar_robot_evaluation(
         group_for_benchmark
     )
     values = selected.groupby("benchmark_group").agg(
+        dof=("dof", "first"),
         success_rate=("success", "mean"),
         planning_time=("planning_time", "mean"),
         path_length=("successful_path_length", "mean"),
         path_points=("successful_path_points", "mean"),
         roadmap_size=("roadmap_size", "mean"),
         collision_checks=("collision_checks", "mean"),
-        difficulty=("difficulty", "first"),
     ).reindex(benchmark_groups)
     values["success_rate"] *= 100.0
+    values["normalized_path_length"] = (
+        values["path_length"] / np.sqrt(values["dof"])
+    )
 
     labels = [
-        f"{name.removeprefix('PlanarRobot ')}\n"
-        f"(difficulty {int(values.loc[name, 'difficulty'])})"
+        name.removeprefix("PlanarRobot ")
         for name in benchmark_groups
     ]
     positions = np.arange(len(benchmark_groups))
-    figure, axes = plt.subplots(2, 2, figsize=(14, 9))
+    figure, axes = plt.subplots(2, 2, figsize=(14, 8))
 
     success_axis = axes[0, 0]
     success_bars = success_axis.bar(
@@ -381,7 +383,7 @@ def plot_planar_robot_evaluation(
     width = 0.32
     length_axis.bar(
         positions - width / 2,
-        values["path_length"],
+        values["normalized_path_length"],
         width,
         color=_YELLOW,
         edgecolor="black",
@@ -394,7 +396,11 @@ def plot_planar_robot_evaluation(
         edgecolor="black",
     )
     length_axis.set_xticks(positions, labels)
-    _style_axis(length_axis, "Final roundtrip length", _YELLOW)
+    _style_axis(
+        length_axis,
+        r"Normalized path length [$\mathrm{rad}/\sqrt{DoF}$]",
+        _YELLOW,
+    )
     _style_right_axis(
         points_axis,
         "Points in final path",
@@ -403,7 +409,7 @@ def plot_planar_robot_evaluation(
     length_axis.legend(
         handles=_metric_handles(
             [
-                ("Final path length", _YELLOW),
+                ("Normalized path length", _YELLOW),
                 ("Points in final path", _PURPLE),
             ]
         ),
@@ -459,23 +465,23 @@ def plot_planar_robot_evaluation(
 
     goal_count = int(selected["number_of_goals"].iloc[0])
     figure.suptitle(
-        f"PlanarManipulator evaluation — {planner_name}, "
-        f"{order_method}, {goal_count} goals, "
-        "3 configuration sets each"
+        "PlanarManipulator evaluation - selected configuration cases\n"
+        f"{planner_name}, {order_method}, {goal_count} goals"
     )
-    figure.tight_layout(rect=(0, 0, 1, 0.94), h_pad=3.0)
+    figure.tight_layout(rect=(0, 0, 1, 0.94), h_pad=2.0)
     return figure
 
 
-def _planner_means(dataframe, benchmark_names, order_methods):
+def _planner_means(dataframe, benchmark_names, order_method):
     selected = _select_results(
         dataframe,
         benchmark_names,
-        order_methods,
+        (order_method,),
     )
-    values = selected.groupby(
-        ["base_planner", "order_method"]
-    ).agg(
+    selected = selected[
+        selected["base_planner"].isin(_COMPARISON_PLANNERS)
+    ]
+    values = selected.groupby("base_planner").agg(
         success_rate=("success", "mean"),
         planning_time=("planning_time", "mean"),
         path_length=("successful_path_length", "mean"),
@@ -484,131 +490,86 @@ def _planner_means(dataframe, benchmark_names, order_methods):
         failed_subpaths=("failed_subpaths", "mean"),
         roadmap_size=("roadmap_size", "mean"),
         collision_checks=("collision_checks", "mean"),
-    )
-    index = pd.MultiIndex.from_product(
-        [_PLANNERS, order_methods],
-        names=["base_planner", "order_method"],
-    )
-    values = values.reindex(index)
+    ).reindex(_COMPARISON_PLANNERS)
     values["success_rate"] *= 100.0
     return values
 
 
-def _values_for(values, metric, order_method):
-    return (
-        values.xs(order_method, level="order_method")[metric]
-        .reindex(_PLANNERS)
-        .to_numpy(dtype=float)
+def _planner_bars(
+    axis,
+    positions,
+    values,
+    metric,
+    *,
+    color,
+    width,
+    offset=0,
+    bottom=None,
+):
+    return axis.bar(
+        positions + offset,
+        values[metric],
+        width,
+        bottom=values[bottom] if bottom else None,
+        color=color,
+        edgecolor="black",
+        linewidth=0.6,
     )
 
 
-def _bars_for_methods(
-    axis,
-    values,
-    metric,
-    positions,
-    centers,
-    width,
-    color,
-    order_methods,
-    stacked_on=None,
-):
-    bars = []
-    offsets = (0,) if len(order_methods) == 1 else (-width / 2, width / 2)
-    for offset, method in zip(offsets, order_methods):
-        bottom = (
-            _values_for(values, stacked_on, method)
-            if stacked_on
-            else None
-        )
-        bars.append(
-            axis.bar(
-                positions + centers + offset,
-                _values_for(values, metric, method),
-                width,
-                bottom=bottom,
-                color=color,
-                edgecolor="black",
-                linewidth=0.6,
-                hatch=_METHOD_HATCHES[method],
-            )
-        )
-    return bars
-
-
-def _plot_success_rate(values, title, order_methods):
+def _plot_success_rate(values, title):
     figure, axis = plt.subplots(figsize=(9, 5))
-    positions = np.arange(len(_PLANNERS))
-    bars = _bars_for_methods(
+    positions = np.arange(len(_COMPARISON_PLANNERS))
+    bars = _planner_bars(
         axis,
+        positions,
         values,
         "success_rate",
-        positions,
-        centers=0,
-        width=0.32,
         color=_BLUE,
-        order_methods=order_methods,
+        width=0.55,
     )
 
     _set_planner_axis(axis, positions)
     _style_axis(axis, "Success rate [%]", _BLUE)
     axis.set_ylim(0, 110)
-    for method_bars in bars:
-        _add_value_labels(axis, method_bars, "{:.0f}%")
-    if len(order_methods) > 1:
-        figure.legend(
-            handles=_method_handles(order_methods),
-            loc="upper center",
-            bbox_to_anchor=(0.5, 0.91),
-            ncol=len(order_methods),
-            title="Visit order",
-        )
+    _add_value_labels(axis, bars, "{:.0f}%")
     figure.suptitle(f"{title}: Reliability", y=0.98)
-    figure.subplots_adjust(
-        left=0.10,
-        right=0.97,
-        bottom=0.14,
-        top=0.78,
-    )
+    figure.tight_layout(rect=(0, 0, 1, 0.93))
     return figure
 
 
-def _plot_path_and_time(values, title, order_methods):
+def _plot_path_and_time(values, title):
     figure, time_axis = plt.subplots(figsize=(12, 6))
     length_axis = time_axis.twinx()
     points_axis = time_axis.twinx()
-    positions = np.arange(len(_PLANNERS))
-    width = 0.12
+    positions = np.arange(len(_COMPARISON_PLANNERS))
+    width = 0.18
 
-    _bars_for_methods(
+    _planner_bars(
         time_axis,
+        positions,
         values,
         "planning_time",
-        positions,
-        centers=-0.28,
-        width=width,
         color=_BLUE,
-        order_methods=order_methods,
+        width=width,
+        offset=-0.25,
     )
-    _bars_for_methods(
+    _planner_bars(
         length_axis,
+        positions,
         values,
         "path_length",
-        positions,
-        centers=0,
-        width=width,
         color=_YELLOW,
-        order_methods=order_methods,
+        width=width,
     )
-    _bars_for_methods(
+    _planner_bars(
         points_axis,
+        positions,
         values,
         "path_points",
-        positions,
-        centers=0.28,
-        width=width,
         color=_PURPLE,
-        order_methods=order_methods,
+        width=width,
+        offset=0.25,
     )
 
     _set_planner_axis(time_axis, positions)
@@ -621,19 +582,16 @@ def _plot_path_and_time(values, title, order_methods):
         offset=70,
     )
     figure.legend(
-        handles=(
-            _metric_handles(
-                [
-                    ("Planning time", _BLUE),
-                    ("Final path length", _YELLOW),
-                    ("Points in final path", _PURPLE),
-                ]
-            )
-            + _method_handles(order_methods)
+        handles=_metric_handles(
+            [
+                ("Planning time", _BLUE),
+                ("Final path length", _YELLOW),
+                ("Points in final path", _PURPLE),
+            ]
         ),
         loc="upper center",
-        bbox_to_anchor=(0.5, 0.91),
-        ncol=5,
+        bbox_to_anchor=(0.5, 0.92),
+        ncol=3,
     )
     figure.suptitle(
         f"{title}: Planning effort and path quality",
@@ -643,90 +601,80 @@ def _plot_path_and_time(values, title, order_methods):
         left=0.09,
         right=0.78,
         bottom=0.13,
-        top=0.78,
+        top=0.83,
     )
     return figure
 
 
-def _plot_subpaths(values, title, order_methods):
+def _plot_subpaths(values, title):
     figure, axis = plt.subplots(figsize=(9, 5.5))
-    positions = np.arange(len(_PLANNERS))
-    width = 0.32
-    successful = _bars_for_methods(
+    positions = np.arange(len(_COMPARISON_PLANNERS))
+    successful = _planner_bars(
         axis,
+        positions,
         values,
         "successful_subpaths",
-        positions,
-        centers=0,
-        width=width,
         color=_GREEN,
-        order_methods=order_methods,
+        width=0.55,
     )
-    failed = _bars_for_methods(
+    failed = _planner_bars(
         axis,
+        positions,
         values,
         "failed_subpaths",
-        positions,
-        centers=0,
-        width=width,
         color=_RED,
-        order_methods=order_methods,
-        stacked_on="successful_subpaths",
+        width=0.55,
+        bottom="successful_subpaths",
     )
 
     _set_planner_axis(axis, positions)
     _style_axis(axis, "Average number of pairwise paths", _BLUE)
-    for method_bars in successful + failed:
-        _add_segment_labels(axis, method_bars)
+    _add_segment_labels(axis, successful)
+    _add_segment_labels(axis, failed)
     figure.legend(
-        handles=(
-            _metric_handles(
-                [
-                    ("Successful subpaths", _GREEN),
-                    ("Failed subpaths", _RED),
-                ]
-            )
-            + _method_handles(order_methods)
+        handles=_metric_handles(
+            [
+                ("Successful subpaths", _GREEN),
+                ("Failed subpaths", _RED),
+            ]
         ),
         loc="upper center",
-        bbox_to_anchor=(0.5, 0.91),
-        ncol=4,
+        bbox_to_anchor=(0.5, 0.92),
+        ncol=2,
     )
     figure.suptitle(f"{title}: Pairwise paths", y=0.98)
     figure.subplots_adjust(
         left=0.10,
         right=0.97,
         bottom=0.14,
-        top=0.76,
+        top=0.82,
     )
     return figure
 
 
-def _plot_roadmap_and_checks(values, title, order_methods):
+def _plot_roadmap_and_checks(values, title):
     figure, roadmap_axis = plt.subplots(figsize=(11, 5.5))
     checks_axis = roadmap_axis.twinx()
-    positions = np.arange(len(_PLANNERS))
-    width = 0.17
+    positions = np.arange(len(_COMPARISON_PLANNERS))
+    width = 0.3
 
-    _bars_for_methods(
+    _planner_bars(
         roadmap_axis,
+        positions,
         values,
         "roadmap_size",
-        positions,
-        centers=-0.22,
-        width=width,
         color=_PURPLE,
-        order_methods=order_methods,
+        width=width,
+        offset=-0.18,
     )
-    _bars_for_methods(
+    _planner_bars(
         checks_axis,
+        positions,
         values,
         "collision_checks",
-        positions,
-        centers=0.22,
-        width=width,
         color=_YELLOW,
-        order_methods=order_methods,
+        width=width,
+        offset=0.18,
     )
 
     _set_planner_axis(roadmap_axis, positions)
@@ -737,18 +685,15 @@ def _plot_roadmap_and_checks(values, title, order_methods):
     )
     _style_right_axis(checks_axis, "Collision checks", _YELLOW)
     figure.legend(
-        handles=(
-            _metric_handles(
-                [
-                    ("Roadmap size", _PURPLE),
-                    ("Collision checks", _YELLOW),
-                ]
-            )
-            + _method_handles(order_methods)
+        handles=_metric_handles(
+            [
+                ("Roadmap size", _PURPLE),
+                ("Collision checks", _YELLOW),
+            ]
         ),
         loc="upper center",
-        bbox_to_anchor=(0.5, 0.91),
-        ncol=4,
+        bbox_to_anchor=(0.5, 0.92),
+        ncol=2,
     )
     figure.suptitle(
         f"{title}: Roadmap and collision-checking effort",
@@ -761,35 +706,18 @@ def _plot_roadmap_and_checks(values, title, order_methods):
 def plot_base_planner_comparison(
     dataframe,
     benchmark_names,
-    order_methods=_ORDER_METHODS,
+    order_method="exact",
     title="PointRobot base-planner comparison",
 ):
-    """Compare all three base planners using the PointRobot results."""
-    order_methods = _normalize_order_methods(order_methods)
+    """Compare the planners with one fixed visit-order method."""
     values = _planner_means(
         dataframe,
         benchmark_names,
-        order_methods,
+        order_method,
     )
     return {
-        "success_rate": _plot_success_rate(
-            values,
-            title,
-            order_methods,
-        ),
-        "path_and_time": _plot_path_and_time(
-            values,
-            title,
-            order_methods,
-        ),
-        "subpaths": _plot_subpaths(
-            values,
-            title,
-            order_methods,
-        ),
-        "roadmap_and_checks": _plot_roadmap_and_checks(
-            values,
-            title,
-            order_methods,
-        ),
+        "success_rate": _plot_success_rate(values, title),
+        "path_and_time": _plot_path_and_time(values, title),
+        "subpaths": _plot_subpaths(values, title),
+        "roadmap_and_checks": _plot_roadmap_and_checks(values, title),
     }

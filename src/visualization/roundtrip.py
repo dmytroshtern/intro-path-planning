@@ -1,7 +1,6 @@
 """Static visualizations for roundtrip-planning results."""
 
 import matplotlib.pyplot as plt
-import networkx as nx
 import numpy as np
 
 from notebooks.IPEnvironmentKin import KinChainCollisionChecker
@@ -16,13 +15,6 @@ _TOUR_COLORS = (
     "#8c564b",
     "#e377c2",
 )
-
-
-def _require_success(result):
-    """Raise a clear error when a failed roundtrip is visualized."""
-    if not result.get("success", False):
-        reason = result.get("reason", "unknown reason")
-        raise ValueError(f"Cannot visualize a failed roundtrip: {reason}")
 
 
 def _configure_axis(benchmark, ax):
@@ -126,7 +118,7 @@ def plot_roundtrip_components(result, benchmark):
     if benchmark.collisionChecker.getDim() != 2:
         raise ValueError("Roundtrip component plots require 2 DoF.")
 
-    figure, axes = plt.subplots(1, 2, figsize=(16, 7))
+    figure, axes = plt.subplots(1, 2, figsize=(14.5, 6.4))
     pairwise_ax, tour_ax = axes
 
     _configure_axis(benchmark, pairwise_ax)
@@ -199,85 +191,12 @@ def plot_roundtrip_components(result, benchmark):
         frameon=True,
     )
 
-    figure.suptitle(benchmark.name, fontsize=15)
-    figure.tight_layout(rect=(0, 0.12, 1, 0.96))
+    figure.suptitle(benchmark.name, fontsize=15, y=0.97)
+    figure.subplots_adjust(
+        left=0.06,
+        right=0.98,
+        bottom=0.18,
+        top=0.88,
+        wspace=0.24,
+    )
     return figure, axes
-
-
-def plot_metagraph(planner, result, ax=None):
-    """Draw the metagraph and highlight the selected tour."""
-    _require_success(result)
-    graph = getattr(planner, "metagraph", None)
-    if graph is None:
-        raise ValueError("The planner does not expose a metagraph.")
-
-    if ax is None:
-        _, ax = plt.subplots(figsize=(7, 6))
-
-    positions = nx.circular_layout(graph)
-    selected_edges = {
-        tuple(pair) for pair in result["used_pairs"]
-    }
-    if not graph.is_directed():
-        selected_edges |= {(target, source) for source, target in selected_edges}
-
-    regular_edges = [
-        edge for edge in graph.edges if tuple(edge) not in selected_edges
-    ]
-    tour_edges = [
-        edge for edge in graph.edges if tuple(edge) in selected_edges
-    ]
-
-    node_colors = [
-        "#2ca02c" if node == "S" else "#d62728"
-        for node in graph.nodes
-    ]
-    nx.draw_networkx_nodes(
-        graph,
-        positions,
-        node_color=node_colors,
-        node_size=900,
-        edgecolors="black",
-        ax=ax,
-    )
-    nx.draw_networkx_labels(graph, positions, font_color="white", ax=ax)
-    nx.draw_networkx_edges(
-        graph,
-        positions,
-        edgelist=regular_edges,
-        edge_color="#b7b7b7",
-        width=1.2,
-        ax=ax,
-    )
-    nx.draw_networkx_edges(
-        graph,
-        positions,
-        edgelist=tour_edges,
-        edge_color="#0057b8",
-        width=3.0,
-        arrows=graph.is_directed(),
-        ax=ax,
-    )
-    edge_labels = {
-        edge: f"{data.get('weight', data.get('cost', 0.0)):.1f}"
-        for *edge_nodes, data in graph.edges(data=True)
-        for edge in [tuple(edge_nodes)]
-    }
-    nx.draw_networkx_edge_labels(
-        graph,
-        positions,
-        edge_labels=edge_labels,
-        font_size=8,
-        label_pos=0.35,
-        rotate=False,
-        bbox={
-            "boxstyle": "round,pad=0.2",
-            "facecolor": "white",
-            "edgecolor": "none",
-            "alpha": 0.85,
-        },
-        ax=ax,
-    )
-    ax.set_title("Metagraph and selected roundtrip")
-    ax.axis("off")
-    return ax

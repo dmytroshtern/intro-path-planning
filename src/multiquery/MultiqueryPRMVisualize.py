@@ -8,22 +8,21 @@ License is based on Creative Commons: Attribution-NonCommercial 4.0 Internationa
 
 import networkx as nx
 
-import networkx as nx
-def multiqueryPRMVisualize(planner, solution, ax = None, nodeSize = 300):
-    # get a list of positions of all nodes by returning the content of the attribute 'pos'
-    graph = planner.graph
-    statsHandler = planner.statsHandler
-    collChecker = planner._collisionChecker
+def multiqueryPRMVisualize(solution, collisionchecker, ax = None, nodeSize = 300):
+    graph = solution["graph"]
+    path = solution["path"]
+
     pos = nx.get_node_attributes(graph,'pos')
     color = nx.get_node_attributes(graph,'color')
 
-    collChecker.drawObstacles(ax)
-    
+    collisionchecker.drawObstacles(ax)
+
+    '''
     if not statsHandler:
         statPos = nx.get_node_attributes(statsHandler.graph,'pos')
         nx.draw_networkx_nodes(statsHandler.graph, pos=statPos, alpha=0.2,node_size=nodeSize)
         nx.draw_networkx_edges(statsHandler.graph, pos=statPos, alpha=0.2,edge_color='y')
-        
+    '''
     # draw graph 
     nx.draw_networkx_nodes(graph, pos, ax = ax, nodelist=list(color.keys()), node_color=list(color.values()), node_size=nodeSize)
     edge_colors = [
@@ -62,9 +61,9 @@ def multiqueryPRMVisualize(planner, solution, ax = None, nodeSize = 300):
                                width=2.0, ax = ax
                             )
     '''
-    
-    solution_edges = list(zip(solution[:-1], solution[1:]))
-    nx.draw_networkx_edges(graph,pos,edgelist=solution_edges,alpha=0.5,edge_color='lightgreen',width=5.0, label="Solution Path")
+    if not path is None:
+        path_edges = list(zip(path[:-1], path[1:]))
+        nx.draw_networkx_edges(graph,pos,edgelist=path_edges,alpha=0.5,edge_color='lightgreen',width=5.0, label="Solution Path")
     
     
 

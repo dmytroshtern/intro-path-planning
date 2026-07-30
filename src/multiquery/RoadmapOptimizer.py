@@ -17,6 +17,7 @@ class RoadmapOptimizer:
         self.nodeLabelPrefix = "opt"
         self.nodeCounter = 0
 
+    @IPPerfMonitor
     def optimizeRoadmap(self, originalGraph: nx.Graph):
         graph = originalGraph.copy()
         self._probabilisticShortcuts(graph, 200)

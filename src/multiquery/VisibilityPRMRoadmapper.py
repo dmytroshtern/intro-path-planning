@@ -17,21 +17,25 @@ from .VisibilityStatsHandler import VisibilityStatsHandler
 
 
 class VisibilityPRMRoadmapper(PRMBase):
-    """Class implements an simplified version of a visibility PRM"""
+    """Build and refine a simplified visibility PRM roadmap."""
 
     def __init__(self, _collChecker):
+        """Initialize the roadmap builder with the collision checker from the planner."""
         super(VisibilityPRMRoadmapper, self).__init__(_collChecker)
         self.nodeNumber = 0
 
     def _isVisible(self, pos, goalPos, maxVisibility = inf):
+        """Return ``True`` when ``goalPos`` is within range and the segment is collision free."""
         return dist(pos, goalPos) < maxVisibility and not self._collisionChecker.lineInCollision(pos, goalPos)
 
     @IPPerfMonitor
     def learnRoadmap(self, config, visibilityStatsHandler : VisibilityStatsHandler, maxVisibility = inf):
+        """Create a fresh roadmap by repeatedly integrating sampled nodes."""
         return self.refineRoadmap(config, visibilityStatsHandler, nx.Graph(), maxVisibility)
 
 
     def refineRoadmap(self, config, visibilityStatsHandler : VisibilityStatsHandler,  graph, maxVisibility = inf):
+        """Grow ``graph`` until the configured number of failed insertion attempts is reached."""
         ntry = config.get("ntry", 40)
         currTry = 0
         while currTry < ntry:
@@ -45,6 +49,7 @@ class VisibilityPRMRoadmapper(PRMBase):
         return graph
 
     def integrateNode(self, graph: nx.Graph, visibilityStatsHandler, maxVisibility = inf):
+        """Sample a free node and merge it into the roadmap when it sees existing guards."""
         g_vis = None
         guardAdded = False
         # select a random  free position
@@ -81,6 +86,7 @@ class VisibilityPRMRoadmapper(PRMBase):
 
 
     def _addNodeToRoadmap(self, graph, posList, kdTree, node_pos, label, multipleConnections=False):
+        """Insert a start/goal node and connect it to visible nodes."""
         graph.add_node(label, nodeType = "Guard", pos=node_pos)
         connectionCandidates = kdTree.query(node_pos, k=15)
         result = False
@@ -97,6 +103,10 @@ class VisibilityPRMRoadmapper(PRMBase):
 
 
     def addStartAndGoalsToRoadmap(self, graph, startList, goalList, optimize):
+        """
+        Attach the start node and all goal nodes to the existing roadmap.
+        If optimize == True, start and goal nodes can be attached to more than one node and to each other.
+        """
         posList = nx.get_node_attributes(graph, 'pos')
         kdTree = cKDTree(list(posList.values()))
         self._addNodeToRoadmap(graph, posList, kdTree, startList[0], "S", optimize)

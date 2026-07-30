@@ -134,8 +134,8 @@ class RoundtripBenchmarkRunner:
         np.random.seed(seed)
         if base_planner_name == MULTIQUERY_PLANNER_NAME:
             planner = MultiQueryRoundtripPlanner(
-            benchmark.collisionChecker
-        )
+                benchmark.collisionChecker,
+            )
         else:
             planner = RoundtripPlanner(benchmark.collisionChecker)
         config = build_roundtrip_config(

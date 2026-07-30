@@ -1,5 +1,8 @@
+from os.path import samefile
 from timeit import repeat
 
+from IPPRMBase import PRMBase
+from multiquery import VisibilityStatsHandler
 from IPPerfMonitor import IPPerfMonitor
 from notebooks.IPEnvironment import CollisionChecker
 import networkx as nx
@@ -7,9 +10,9 @@ import random
 from typing import Any
 import numpy as np
 from math import dist
-from . import GraphUtility as gu
+import multiquery.GraphUtility as gu
 
-class RoadmapOptimizer:
+class RoadmapOptimizer(PRMBase):
 
     def __init__(self, collisionChecker: CollisionChecker):
         self._collisionChecker = collisionChecker
@@ -44,3 +47,28 @@ class RoadmapOptimizer:
 
             if not self._collisionChecker.lineInCollision(posList[startNode], posList[endNode]):
                 gu.addWeightedEdge(graph, startNode, endNode, color = "red")
+
+    def bridgeSamples(self, maxSamples):
+        samples = 0
+        validMidpoints = []
+        while samples < maxSamples:
+            obs1, samples = self._getRandomOccupiedPosition(samples, maxSamples)
+            obs2, samples = self._getRandomOccupiedPosition(samples, maxSamples)
+            if obs1 is None or obs2 is None:
+                break
+            mid = self._findMidpoint(obs1, obs2)
+            if not self._collisionChecker.pointInCollision(mid):
+                validMidpoints.append(mid)
+        return validMidpoints
+
+    def _getRandomOccupiedPosition(self,samples, maxSamples):
+        while samples < maxSamples:
+            samples += 1
+            pos = np.asarray(self._getRandomPosition())
+            if self._collisionChecker.pointInCollision(pos):
+                return pos, samples
+        return None, samples
+
+    def _findMidpoint(self, startPos, goalPos):
+        goalToStart = -goalPos + startPos
+        return goalPos + goalToStart/2

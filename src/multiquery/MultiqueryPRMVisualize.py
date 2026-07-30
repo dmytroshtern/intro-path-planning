@@ -7,6 +7,15 @@ License is based on Creative Commons: Attribution-NonCommercial 4.0 Internationa
 """
 
 import networkx as nx
+import matplotlib.pylab as plt
+
+def drawFigure(title, solution, collisionchecker):
+    fig_local = plt.figure(figsize=(10,10))
+    ax = fig_local.add_subplot(1,1,1)
+    if solution["path"] is None or len(solution["path"]) == 0:
+            title += " (No path found!)"
+    ax.set_title(title)
+    multiqueryPRMVisualize(solution, collisionchecker, ax=ax, nodeSize=50)
 
 def multiqueryPRMVisualize(solution, collisionchecker, ax = None, nodeSize = 300):
     """Draw a roadmap solution, its obstacles, and the highlighted solution path."""

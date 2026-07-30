@@ -59,6 +59,11 @@ class MultiQueryRoundtripPlanner(PlanerBase):
                 metadata={}
             )
 
+        #Overwrite Config to match general benchmarking scheme
+        isOptimized = config.get("ordering_method", "greedy") == "exact"
+        config["optimizeRoadmap"] = isOptimized
+        config["optimizePath"] = isOptimized
+
         baseRoadmap = self._roadmapPlanner.learnRoadmap(config, self.statsHandler)
 
         if config.get("optimizeRoadmap", False):
@@ -141,6 +146,7 @@ class MultiQueryRoundtripPlanner(PlanerBase):
             self._addSolution(solutions, basicRoadmapShortcutSolution, basicRoadmapShortcutGraph,
                               "basicRoadmapShortcutSolution")
         except Exception as e:
+            #No TSP solution found
             self._addSolution(solutions, [], basicRoadmapWithStartAndGoals,
                               "basicRoadmapTSPSolution")
             self._addSolution(solutions, [], basicRoadmapWithStartAndGoals,

@@ -10,7 +10,7 @@ import networkx as nx
 import matplotlib.pylab as plt
 
 def drawFigure(title, solution, collisionchecker):
-    fig_local = plt.figure(figsize=(10,10))
+    fig_local = plt.figure(figsize=(9,9))
     ax = fig_local.add_subplot(1,1,1)
     if solution["path"] is None or len(solution["path"]) == 0:
             title += " (No path found!)"

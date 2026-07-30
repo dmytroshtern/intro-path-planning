@@ -60,9 +60,11 @@ class MultiQueryRoundtripPlanner(PlanerBase):
             )
 
         #Overwrite Config to match general benchmarking scheme
-        isOptimized = config.get("ordering_method", "greedy") == "exact"
-        config["optimizeRoadmap"] = isOptimized
-        config["optimizePath"] = isOptimized
+        method = config.get("ordering_method", None)
+        if not method == None:
+            isOptimized = method == "exact"
+            config["optimizeRoadmap"] = isOptimized
+            config["optimizePath"] = isOptimized
 
         baseRoadmap = self._roadmapPlanner.learnRoadmap(config, self.statsHandler)
 

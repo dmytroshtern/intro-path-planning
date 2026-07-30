@@ -135,7 +135,6 @@ class RoundtripBenchmarkRunner:
         np.random.seed(seed)
         if base_planner_name == MULTIQUERY_PLANNER_NAME:
             planner = MultiQueryRoundtripPlanner(
-                VisibilityPRMRoadmapper(benchmark.collisionChecker),
                 benchmark.collisionChecker,
             )
         else:

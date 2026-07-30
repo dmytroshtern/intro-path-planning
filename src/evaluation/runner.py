@@ -11,7 +11,6 @@ import numpy as np
 from src.multiquery.MultiQueryRoundtripPlanner import (
     MultiQueryRoundtripPlanner,
 )
-from src.multiquery.VisibilityPRMRoadmapper import VisibilityPRMRoadmapper
 from src.roundtrip_algorithm import RoundtripPlanner
 
 from .config import (
@@ -135,9 +134,8 @@ class RoundtripBenchmarkRunner:
         np.random.seed(seed)
         if base_planner_name == MULTIQUERY_PLANNER_NAME:
             planner = MultiQueryRoundtripPlanner(
-                VisibilityPRMRoadmapper(benchmark.collisionChecker),
-                benchmark.collisionChecker,
-            )
+            benchmark.collisionChecker
+        )
         else:
             planner = RoundtripPlanner(benchmark.collisionChecker)
         config = build_roundtrip_config(

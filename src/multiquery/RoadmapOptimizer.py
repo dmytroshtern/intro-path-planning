@@ -1,16 +1,10 @@
-from os.path import samefile
-from timeit import repeat
-
 from IPPRMBase import PRMBase
-from multiquery import VisibilityStatsHandler
 from IPPerfMonitor import IPPerfMonitor
 from notebooks.IPEnvironment import CollisionChecker
 import networkx as nx
 import random
-from typing import Any
 import numpy as np
-from math import dist
-import multiquery.GraphUtility as gu
+from . import GraphUtility as gu
 
 class RoadmapOptimizer(PRMBase):
 
@@ -20,9 +14,17 @@ class RoadmapOptimizer(PRMBase):
         self.nodeCounter = 0
 
     @IPPerfMonitor
-    def optimizeRoadmap(self, originalGraph: nx.Graph):
+    def optimizeRandomShortcuts(self, originalGraph: nx.Graph):
         graph = originalGraph.copy()
         self._probabilisticShortcuts(graph, 200)
+        return graph
+
+    @IPPerfMonitor
+    def closeGaps(self, originalGraph: nx.Graph):
+        graph = originalGraph.copy()
+        midpoints = self.bridgeSamples(500)
+        for i, midpoint in enumerate(midpoints):
+            graph.add_node(f"mid{i}", pos=midpoint, color='orange', nodeType='Guard')
         return graph
 
     def _probabilisticShortcuts(self, graph: nx.Graph, tries: int):

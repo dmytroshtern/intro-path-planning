@@ -1,14 +1,8 @@
 from cProfile import label
 
 import networkx as nx
-import traceback
-import numpy as np
 from typing import Type, Any, List
-import matplotlib.pyplot as plt
-from scipy.spatial import cKDTree
 
-
-from IPPRMBase import PRMBase
 from IPPerfMonitor import IPPerfMonitor
 from IPEnvironment import CollisionChecker
 
@@ -64,40 +58,34 @@ class MultiQueryRoundtripPlanner(PlanerBase):
             )
 
         baseRoadmap, bs = self._roadmapPlanner.learnRoadmap(config, self.statsHandler)
-        #baseRoadmap, bs = self._roadmapPlanner.refineRoadmap(config, self.statsHandler, baseRoadmap, bs, 3)
-        #baseRoadmap, bs = self._roadmapPlanner.refineRoadmap(config, self.statsHandler, baseRoadmap, bs)
-        # Conversion of node names to string for consistency
-        baseRoadmap = nx.relabel_nodes(baseRoadmap, str, copy=False)
 
         if config.get("optimizeRoadmap", False):
-            usedRoadmapWithGoals = self.addStartAndGoalsToRoadmap(baseRoadmap.copy(), checkedStartList,
-                                                                  checkedGoalList, True)
-            usedRoadmapWithGoals = self._roadmapOptimizer.optimizeRoadmap(usedRoadmapWithGoals)
+            usedRoadmapWithGoals = self.generateOptimizedRoadmap(baseRoadmap, checkedGoalList, checkedStartList, config)
         else:
-            usedRoadmapWithGoals = self.addStartAndGoalsToRoadmap(baseRoadmap.copy(), checkedStartList,
+            usedRoadmapWithGoals = self._roadmapPlanner.addStartAndGoalsToRoadmap(baseRoadmap.copy(), checkedStartList,
                                                                   checkedGoalList, False)
 
         try:
-            tsgSolution = self._findTSGSolution(usedRoadmapWithGoals)
+            tspSolution = self._findTSPSolution(usedRoadmapWithGoals)
 
         except Exception as e:
             self.graph = usedRoadmapWithGoals
             return roundtrip_failure(
-                reason=f"TSG solver failed: {e}",
+                reason=f"TSP solver failed: {e}",
                 pairwise_results=None,
                 failed_pairs=None,
                 metadata={
-                    "stage": "TSG solver"
+                    "stage": "TSP solver"
                 }
             )
         if config.get("optimizePath", False):
-            shortcutSolution, shortcutGraph = self._pathOptimizer.shortcut_path(usedRoadmapWithGoals, tsgSolution)
+            shortcutSolution, shortcutGraph = self._pathOptimizer.shortcut_path(usedRoadmapWithGoals, tspSolution)
             usedSolution = shortcutSolution
             usedCost = gu.pathLength(shortcutGraph, shortcutSolution)
             self.graph = shortcutGraph
         else:
-            usedSolution = tsgSolution
-            usedCost = gu.pathLength(usedRoadmapWithGoals, tsgSolution)
+            usedSolution = tspSolution
+            usedCost = gu.pathLength(usedRoadmapWithGoals, tspSolution)
             self.graph = usedRoadmapWithGoals
 
         visitOrder = self.trimPathToKnownNodes(usedSolution)
@@ -129,48 +117,46 @@ class MultiQueryRoundtripPlanner(PlanerBase):
         if not len(checkedGoalList) is len(goalList):
             return {}
 
-        baseRoadmap, bs = self._roadmapPlanner.learnRoadmap(config, self.statsHandler)
-        # baseRoadmap, bs = self._roadmapPlanner.refineRoadmap(config, self.statsHandler, baseRoadmap, bs, 3)
-        # baseRoadmap, bs = self._roadmapPlanner.refineRoadmap(config, self.statsHandler, baseRoadmap, bs)
+        baseRoadmap = self._roadmapPlanner.learnRoadmap(config, self.statsHandler)
         # Conversion of node names to string for consistency
         baseRoadmap = nx.relabel_nodes(baseRoadmap, str, copy=False)
 
         solutions = {}
 
-        basicRoadmapWithStartAndGoals = self.addStartAndGoalsToRoadmap(baseRoadmap.copy(), checkedStartList,
+        basicRoadmapWithStartAndGoals = self._roadmapPlanner.addStartAndGoalsToRoadmap(baseRoadmap.copy(), checkedStartList,
                                                                        checkedGoalList, False)
         try:
-            # Create basic roadmap TSG solution
-            basicRoadmapTSGSolution = self._findTSGSolution(basicRoadmapWithStartAndGoals)
-            self._addSolution(solutions, basicRoadmapTSGSolution, basicRoadmapWithStartAndGoals,
-                              "basicRoadmapTSGSolution")
+            # Create basic roadmap TSP solution
+            basicRoadmapTSPSolution = self._findTSPSolution(basicRoadmapWithStartAndGoals)
+            self._addSolution(solutions, basicRoadmapTSPSolution, basicRoadmapWithStartAndGoals,
+                              "basicRoadmapTSPSolution")
 
             # Create path optimized solution
             basicRoadmapShortcutSolution, basicRoadmapShortcutGraph = self._pathOptimizer.shortcut_path(
                 basicRoadmapWithStartAndGoals,
-                basicRoadmapTSGSolution)
+                basicRoadmapTSPSolution)
             self._addSolution(solutions, basicRoadmapShortcutSolution, basicRoadmapShortcutGraph,
                               "basicRoadmapShortcutSolution")
         except Exception as e:
             self._addSolution(solutions, [], basicRoadmapWithStartAndGoals,
-                              "basicRoadmapTSGSolution")
+                              "basicRoadmapTSPSolution")
             self._addSolution(solutions, [], basicRoadmapWithStartAndGoals,
                               "basicRoadmapShortcutSolution")
 
-        optimizedRoadmapWithStartAndGoals = self.addStartAndGoalsToRoadmap(baseRoadmap.copy(), checkedStartList,
-                                                                           checkedGoalList, True)
-        optimizedRoadmapWithStartAndGoals = self._roadmapOptimizer.optimizeRoadmap(
-            optimizedRoadmapWithStartAndGoals)
+
+        optimizedRoadmapWithStartAndGoals = self.generateOptimizedRoadmap(baseRoadmap, checkedGoalList,
+                                                                          checkedStartList, config)
+
         try:
-            # Create optimized roadmap TSG solution
-            optimizedRoadmapTSGSolution = self._findTSGSolution(optimizedRoadmapWithStartAndGoals)
-            self._addSolution(solutions, optimizedRoadmapTSGSolution, optimizedRoadmapWithStartAndGoals,
-                              "optimizedRoadmapTSGSolution")
+            # Create optimized roadmap TSP solution
+            optimizedRoadmapTSPSolution = self._findTSPSolution(optimizedRoadmapWithStartAndGoals)
+            self._addSolution(solutions, optimizedRoadmapTSPSolution, optimizedRoadmapWithStartAndGoals,
+                              "optimizedRoadmapTSPSolution")
         except Exception as e:
             # No solution for optimized Roadmap -> No solution at all expected
             self.graph = optimizedRoadmapWithStartAndGoals
             self._addSolution(solutions, [], optimizedRoadmapWithStartAndGoals,
-                              "optimizedRoadmapTSGSolution")
+                              "optimizedRoadmapTSPSolution")
             self._addSolution(solutions, [], optimizedRoadmapWithStartAndGoals,
                               "optimizedRoadmapShortcutSolution")
             return solutions
@@ -178,13 +164,30 @@ class MultiQueryRoundtripPlanner(PlanerBase):
         # Create path optimized solution
         optimizedRoadmapShortcutSolution, optimizedRoadmapShortcutGraph = self._pathOptimizer.shortcut_path(
             optimizedRoadmapWithStartAndGoals,
-            optimizedRoadmapTSGSolution)
+            optimizedRoadmapTSPSolution)
         self._addSolution(solutions, optimizedRoadmapShortcutSolution, optimizedRoadmapShortcutGraph,
                           "optimizedRoadmapShortcutSolution")
         return solutions
 
+    def generateOptimizedRoadmap(self, baseRoadmap, checkedGoalList: list[Any], checkedStartList: list[Any],
+                                 config: dict) -> Any:
+        optimizedRoadmapWithStartAndGoals = self._roadmapPlanner.addStartAndGoalsToRoadmap(baseRoadmap.copy(),
+                                                                                           checkedStartList,
+                                                                                           checkedGoalList, True)
+        optimizedRoadmapWithStartAndGoals = self._roadmapOptimizer.optimizeRandomShortcuts(
+            optimizedRoadmapWithStartAndGoals)
+
+        component = nx.node_connected_component(optimizedRoadmapWithStartAndGoals, "S")
+        all_connected = all(node in component for node in
+                            [node for node in optimizedRoadmapWithStartAndGoals.nodes if node.startswith("G")])
+        if not all_connected:
+            optimizedRoadmapWithStartAndGoals = self._roadmapOptimizer.closeGaps(optimizedRoadmapWithStartAndGoals)
+            optimizedRoadmapWithStartAndGoals = self._roadmapPlanner.refineRoadmap(config, self.statsHandler,
+                                                                                   optimizedRoadmapWithStartAndGoals)
+        return optimizedRoadmapWithStartAndGoals
+
     @IPPerfMonitor
-    def _findTSGSolution(self, usedRoadmapWithGoals):
+    def _findTSPSolution(self, usedRoadmapWithGoals):
         goalNodes = [node for node in usedRoadmapWithGoals.nodes if node.startswith("G")]
         return list(nx.algorithms.approximation.traveling_salesman_problem(
             usedRoadmapWithGoals,
@@ -206,35 +209,6 @@ class MultiQueryRoundtripPlanner(PlanerBase):
 
     def _makeUsedPairs(self, visitOrder: list[str]) -> list[tuple[str, str]]:
         return list(zip(visitOrder, visitOrder[1:]))
-
-
-
-    def _addNodeToRoadmap(self, graph, posList, kdTree, node_pos, label, multipleConnections=False):
-        graph.add_node(label, nodeType = label, pos=node_pos)
-        connectionCandidates = kdTree.query(node_pos, k=15)
-        result = False
-        for connectionCandidate in connectionCandidates[1]:
-            if connectionCandidate == kdTree.n:
-                break
-
-            if self._isVisible(node_pos, (graph.nodes[list(posList.keys())[connectionCandidate]]['pos'])):
-                gu.addWeightedEdge(graph, label, list(posList.keys())[connectionCandidate])
-                result = True
-                if not multipleConnections:
-                    break
-        return result
-
-
-    def addStartAndGoalsToRoadmap(self, graph, startList, goalList, optimize):
-        posList = nx.get_node_attributes(graph, 'pos')
-        kdTree = cKDTree(list(posList.values()))
-        self._addNodeToRoadmap(graph, posList, kdTree, startList[0], "S", optimize)
-        for index, goal in enumerate(goalList):
-            if optimize:
-                posList = nx.get_node_attributes(graph, 'pos')
-                kdTree = cKDTree(list(posList.values()))
-            self._addNodeToRoadmap(graph, posList, kdTree, goal, f"G{index}", optimize)
-        return graph
 
 
 

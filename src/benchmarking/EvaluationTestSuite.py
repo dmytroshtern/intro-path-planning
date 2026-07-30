@@ -57,7 +57,6 @@ class SelfCollisionKinChainChecker(KinChainCollisionChecker):
         )
 
 
-# Lecture name, report name, description, difficulty, candidate goals
 _POINT_ROBOT_SPECS = (
     (
         "Trap",
@@ -168,7 +167,7 @@ _PLANAR_CASES = (
                 [-1.0070, 1.3436],
                 [
                     [-2.1370, -1.3293],
-                    [1.6117, 1.4337],
+                    [-2.1565, 1.1714],
                     [0.1460, 1.5000],
                 ],
             ),
@@ -176,7 +175,7 @@ _PLANAR_CASES = (
                 [-0.9021, 0.7824],
                 [
                     [-2.3642, 0.2711],
-                    [-0.5763, -1.1818],
+                    [1.9124, 1.1714],
                     [-1.3589, -1.9088],
                 ],
             ),

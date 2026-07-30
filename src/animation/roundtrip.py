@@ -232,7 +232,6 @@ def _animation_html(figure, update, number_of_frames, interval):
         frames=number_of_frames,
         interval=interval,
     )
-    animation.save("animation.gif", writer="pillow", fps=15)
     html = HTML(animation.to_jshtml())
     plt.close(figure)
     return html

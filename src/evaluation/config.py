@@ -81,7 +81,10 @@ def build_roundtrip_config(
 ):
     """Build a configuration accepted by RoundtripPlanner."""
     if base_planner_name == MULTIQUERY_PLANNER_NAME:
-        return deepcopy(_MULTIQUERY_CONFIG)
+        config = deepcopy(_MULTIQUERY_CONFIG)
+        config["ordering_method"] = order_method
+        config["random_seed"] = seed
+        return config
     if base_planner_name not in _PLANNER_CLASSES:
         raise KeyError(f"Unknown base planner: {base_planner_name}")
     if order_method not in ORDER_METHODS_TO_COMPARE:

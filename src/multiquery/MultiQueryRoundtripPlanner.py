@@ -25,11 +25,11 @@ from src.roundtrip_algorithm.result import (
 
 class MultiQueryRoundtripPlanner(PlanerBase):
 
-    def __init__(self, roadmapPlanner: VisibilityPRMRoadmapper, collisionChecker: CollisionChecker):
+    def __init__(self, collisionChecker: CollisionChecker):
         #assert hasattr(roadmapPlannerClass, "createNewRoadmapGraph"), "roadmapPlannerClass must have a method called 'createNewRoadmapGraph'"
         super().__init__(collisionChecker) # base visibility PRM roadmap to be reused
         self.graph = nx.Graph() # graph to store all paths between start and goal nodes
-        self._roadmapPlanner = roadmapPlanner
+        self._roadmapPlanner = VisibilityPRMRoadmapper(collisionChecker)
         self.statsHandler = VisibilityStatsHandler()
         self._collisionChecker = collisionChecker
         self._pathOptimizer = PathOptimizer(collisionChecker)
@@ -58,18 +58,20 @@ class MultiQueryRoundtripPlanner(PlanerBase):
                 metadata={}
             )
 
-        baseRoadmap = self._roadmapPlanner.learnRoadmap(config, self.statsHandler)
+        baseRoadmap, bs = self._roadmapPlanner.learnRoadmap(config, self.statsHandler)
+        #baseRoadmap, bs = self._roadmapPlanner.refineRoadmap(config, self.statsHandler, baseRoadmap, bs, 3)
+        #baseRoadmap, bs = self._roadmapPlanner.refineRoadmap(config, self.statsHandler, baseRoadmap, bs)
         # Conversion of node names to string for consistency
         baseRoadmap = nx.relabel_nodes(baseRoadmap, str, copy=False)
 
         if not doBenchmark:
             if config.get("optimizeRoadmap", False):
-                usedRoadmapWithGoals = self.addStartGoalToRoadmap(baseRoadmap.copy(), checkedStartList,
+                usedRoadmapWithGoals = self.addStartAndGoalsToRoadmap(baseRoadmap.copy(), checkedStartList,
                                                                       checkedGoalList, True)
                 usedRoadmapWithGoals = self._roadmapOptimizer.optimizeRoadmap(usedRoadmapWithGoals)
             else:
-                usedRoadmapWithGoals = self.addStartGoalToRoadmap(baseRoadmap.copy(), checkedStartList,
-                                                                            checkedGoalList, False)
+                usedRoadmapWithGoals = self.addStartAndGoalsToRoadmap(baseRoadmap.copy(), checkedStartList,
+                                                                      checkedGoalList, False)
 
             goalNodes = [node for node in usedRoadmapWithGoals.nodes if node.startswith("G")]
 
@@ -103,7 +105,7 @@ class MultiQueryRoundtripPlanner(PlanerBase):
             visitOrder = self.trimPathToKnownNodes(usedSolution)
             return roundtrip_success(
                 visit_order=visitOrder,
-                used_pairs=self.makeUsedPairs(visitOrder),
+                used_pairs=self._makeUsedPairs(visitOrder),
                 final_path_configs=usedSolution,
                 tour_cost=usedCost,
                 pairwise_results={},
@@ -116,7 +118,7 @@ class MultiQueryRoundtripPlanner(PlanerBase):
         else:
             solutions = {}
 
-            optimizedRoadmapWithStartAndGoals = self.addStartGoalToRoadmap(baseRoadmap.copy(), checkedStartList, checkedGoalList, True)
+            optimizedRoadmapWithStartAndGoals = self.addStartAndGoalsToRoadmap(baseRoadmap.copy(), checkedStartList, checkedGoalList, True)
             optimizedRoadmapWithStartAndGoals = self._roadmapOptimizer.optimizeRoadmap(optimizedRoadmapWithStartAndGoals)
             try:
                 # Create optimized roadmap TSG solution
@@ -145,7 +147,7 @@ class MultiQueryRoundtripPlanner(PlanerBase):
 
 
 
-            basicRoadmapWithStartAndGoals = self.addStartGoalToRoadmap(baseRoadmap.copy(), checkedStartList, checkedGoalList, False)
+            basicRoadmapWithStartAndGoals = self.addStartAndGoalsToRoadmap(baseRoadmap.copy(), checkedStartList, checkedGoalList, False)
             try:
                 # Create basic roadmap TSG solution
                 basicRoadmapTSGSolution = self._findTSGSolution(basicRoadmapWithStartAndGoals)
@@ -166,7 +168,7 @@ class MultiQueryRoundtripPlanner(PlanerBase):
             visitOrder = self.trimPathToKnownNodes(bestSolution)
             result = roundtrip_success(
                 visit_order=visitOrder,
-                used_pairs=self.makeUsedPairs(visitOrder),
+                used_pairs=self._makeUsedPairs(visitOrder),
                 final_path_configs=bestSolution,
                 tour_cost=bestCost,
                 pairwise_results={},
@@ -193,16 +195,12 @@ class MultiQueryRoundtripPlanner(PlanerBase):
     def trimPathToKnownNodes(self, path) -> list[str]:
         return [node for node in path if node.startswith("G") or node.startswith("S")]
 
-    def makeUsedPairs(self, visitOrder: list[str]) -> list[tuple[str, str]]:
+    def _makeUsedPairs(self, visitOrder: list[str]) -> list[tuple[str, str]]:
         return list(zip(visitOrder, visitOrder[1:]))
 
 
 
     def _addNodeToRoadmap(self, graph, posList, kdTree, node_pos, label, multipleConnections=False):
-        '''
-        optimizations
-        1. allow connection between start/goal nodes -> add to KD-tree
-        '''
         graph.add_node(label, nodeType = label, pos=node_pos)
         connectionCandidates = kdTree.query(node_pos, k=15)
         result = False
@@ -218,7 +216,7 @@ class MultiQueryRoundtripPlanner(PlanerBase):
         return result
 
     @IPPerfMonitor
-    def addStartGoalToRoadmap(self, graph, startList, goalList, optimize):
+    def addStartAndGoalsToRoadmap(self, graph, startList, goalList, optimize):
         posList = nx.get_node_attributes(graph, 'pos')
         kdTree = cKDTree(list(posList.values()))
         self._addNodeToRoadmap(graph, posList, kdTree, startList[0], "S", optimize)

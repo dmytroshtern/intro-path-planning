@@ -19,7 +19,7 @@ class RoadmapOptimizer:
 
     def optimizeRoadmap(self, originalGraph: nx.Graph):
         graph = originalGraph.copy()
-        self._probabilisticShortcuts(graph, 50)
+        self._probabilisticShortcuts(graph, 200)
         return graph
 
     def _probabilisticShortcuts(self, graph: nx.Graph, tries: int):

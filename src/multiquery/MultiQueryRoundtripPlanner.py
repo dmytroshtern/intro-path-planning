@@ -57,7 +57,7 @@ class MultiQueryRoundtripPlanner(PlanerBase):
                 metadata={}
             )
 
-        baseRoadmap, bs = self._roadmapPlanner.learnRoadmap(config, self.statsHandler)
+        baseRoadmap = self._roadmapPlanner.learnRoadmap(config, self.statsHandler)
 
         if config.get("optimizeRoadmap", False):
             usedRoadmapWithGoals = self.generateOptimizedRoadmap(baseRoadmap, checkedGoalList, checkedStartList, config)
